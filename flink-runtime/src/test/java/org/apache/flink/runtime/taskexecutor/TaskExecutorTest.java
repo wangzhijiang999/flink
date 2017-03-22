@@ -230,7 +230,9 @@ public class TaskExecutorTest extends TestLogger {
 		final TestingSerialRpcService rpc = new TestingSerialRpcService();
 		rpc.registerGateway(rmAddress, rmGateway);
 
-		final TestingLeaderRetrievalService testLeaderService = new TestingLeaderRetrievalService();
+		final TestingLeaderRetrievalService testLeaderService = new TestingLeaderRetrievalService(
+			null,
+			null);
 		final TestingHighAvailabilityServices haServices = new TestingHighAvailabilityServices();
 		haServices.setResourceManagerLeaderRetriever(testLeaderService);
 
