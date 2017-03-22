@@ -787,10 +787,10 @@ public class TaskExecutor extends RpcEndpoint<TaskExecutorGateway> {
 							offerSlotsToJobManager(jobId);
 						} else {
 							log.warn("Slot offering to JobManager failed. Freeing the slots " +
-								"and returning them to the ResourceManager.", throwable);
+									"and returning them to the ResourceManager.", throwable);
 
 							// We encountered an exception. Free the slots and return them to the RM.
-							for (SlotOffer reservedSlot: reservedSlots) {
+							for (SlotOffer reservedSlot : reservedSlots) {
 								freeSlot(reservedSlot.getAllocationId(), throwable);
 							}
 						}
@@ -1277,15 +1277,14 @@ public class TaskExecutor extends RpcEndpoint<TaskExecutorGateway> {
 			runAsync(new Runnable() {
 				@Override
 				public void run() {
-					log.info("The heartbeat of JobManager with id {} timed out.", resourceID);
+					log.info("Job manager with id {} heartbeat timed out.", resourceID);
 
 					if (jobManagerConnections.containsKey(resourceID)) {
 						JobManagerConnection jobManagerConnection = jobManagerConnections.get(resourceID);
 						if (jobManagerConnection != null) {
 							closeJobManagerConnection(
 								jobManagerConnection.getJobID(),
-								new TimeoutException("The heartbeat of JobManager with id " +
-									resourceID + " timed out."));
+								new TimeoutException("Job manager with id " + resourceID + " heartbeat timed out."));
 						}
 					}
 				}
@@ -1310,11 +1309,11 @@ public class TaskExecutor extends RpcEndpoint<TaskExecutorGateway> {
 			runAsync(new Runnable() {
 				@Override
 				public void run() {
-					log.info("The heartbeat of ResourceManager with id {} timed out.", resourceID);
+					log.info("Resource manager with id {} heartbeat timed out.", resourceID);
 
 					if (isConnectedToResourceManager() && resourceManagerConnection.getResourceManagerId().equals(resourceID)) {
 						closeResourceManagerConnection(
-								new TimeoutException("The heartbeat of ResourceManager with id " + resourceID + " timed out."));
+								new TimeoutException("Resource manager with id " + resourceID + " heartbeat timed out."));
 					}
 				}
 			});
