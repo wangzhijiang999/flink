@@ -95,7 +95,6 @@ public class ResourceManagerRunner implements FatalErrorHandler {
 	private void shutDownInternally() throws Exception {
 		Exception exception = null;
 		synchronized (lock) {
-
 			try {
 				resourceManager.shutDown();
 			} catch (Exception e) {

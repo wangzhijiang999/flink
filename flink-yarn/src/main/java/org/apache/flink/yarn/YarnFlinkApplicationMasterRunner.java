@@ -199,17 +199,17 @@ public class YarnFlinkApplicationMasterRunner extends AbstractYarnFlinkApplicati
 			commonRpcService.getScheduledExecutor());
 
 		return new YarnResourceManager(
-				ResourceID.generate(),
-				config,
-				ENV,
-				commonRpcService,
-				resourceManagerConfiguration,
-				haServices,
-				heartbeatServices,
-				resourceManagerRuntimeServices.getSlotManagerFactory(),
-				metricRegistry,
-				resourceManagerRuntimeServices.getJobLeaderIdService(),
-				this);
+			ResourceID.generate(),
+			config,
+			ENV,
+			commonRpcService,
+			resourceManagerConfiguration,
+			haServices,
+			heartbeatServices,
+			resourceManagerRuntimeServices.getSlotManagerFactory(),
+			metricRegistry,
+			resourceManagerRuntimeServices.getJobLeaderIdService(),
+			this);
 	}
 
 	private JobManagerRunner createJobManagerRunner(Configuration config) throws Exception{
