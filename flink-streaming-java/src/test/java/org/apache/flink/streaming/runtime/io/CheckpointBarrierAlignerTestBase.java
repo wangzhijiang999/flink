@@ -71,9 +71,9 @@ public abstract class CheckpointBarrierAlignerTestBase {
 
 	private static int sizeCounter = 1;
 
-	CheckpointedInputGate inputGate;
+	AlignedCheckpointedInputGate inputGate;
 
-	protected CheckpointedInputGate createBarrierBuffer(
+	protected AlignedCheckpointedInputGate createBarrierBuffer(
 		int numberOfChannels,
 		BufferOrEvent[] sequence,
 		@Nullable AbstractInvokable toNotify) throws IOException {
@@ -81,15 +81,15 @@ public abstract class CheckpointBarrierAlignerTestBase {
 		return createBarrierBuffer(gate, toNotify);
 	}
 
-	protected CheckpointedInputGate createBarrierBuffer(int numberOfChannels, BufferOrEvent[] sequence) throws IOException {
+	protected AlignedCheckpointedInputGate createBarrierBuffer(int numberOfChannels, BufferOrEvent[] sequence) throws IOException {
 		return createBarrierBuffer(numberOfChannels, sequence, null);
 	}
 
-	protected CheckpointedInputGate createBarrierBuffer(InputGate gate) throws IOException {
+	protected AlignedCheckpointedInputGate createBarrierBuffer(InputGate gate) throws IOException {
 		return createBarrierBuffer(gate, null);
 	}
 
-	abstract CheckpointedInputGate createBarrierBuffer(InputGate gate, @Nullable AbstractInvokable toNotify) throws IOException;
+	abstract AlignedCheckpointedInputGate createBarrierBuffer(InputGate gate, @Nullable AbstractInvokable toNotify) throws IOException;
 
 	abstract void validateAlignmentBuffered(long actualBytesBuffered, BufferOrEvent... sequence);
 
@@ -99,7 +99,7 @@ public abstract class CheckpointBarrierAlignerTestBase {
 		assertTrue(inputGate.isFinished());
 		assertTrue(inputGate.isEmpty());
 
-		inputGate.cleanup();
+		inputGate.close();
 	}
 
 	// ------------------------------------------------------------------------

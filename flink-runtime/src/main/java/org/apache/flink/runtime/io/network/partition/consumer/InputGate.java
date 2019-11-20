@@ -20,8 +20,11 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.PullingAsyncDataInput;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.BufferOrEventListener;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -90,6 +93,10 @@ public abstract class InputGate implements PullingAsyncDataInput<BufferOrEvent>,
 	 * @return {@code Optional.empty()} if there is no data to return or if {@link #isFinished()} returns true.
 	 */
 	public abstract Optional<BufferOrEvent> pollNext() throws IOException, InterruptedException;
+
+	public abstract Collection<Buffer> getQueuedBuffers(int channelIndex);
+
+	public abstract void registerBufferListener(BufferOrEventListener listener, int indexOffset);
 
 	public abstract void sendTaskEvent(TaskEvent event) throws IOException;
 

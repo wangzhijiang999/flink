@@ -32,6 +32,10 @@ import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
+import org.apache.flink.runtime.io.network.buffer.InputPersister;
+import org.apache.flink.runtime.io.network.buffer.NoInputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.NoOutputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.OutputPersister;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
@@ -62,6 +66,8 @@ public class DummyEnvironment implements Environment {
 	private TaskStateManager taskStateManager;
 	private final GlobalAggregateManager aggregateManager;
 	private final AccumulatorRegistry accumulatorRegistry = new AccumulatorRegistry(jobId, executionId);
+	private final InputPersister inputPersister = new NoInputPersisterImpl();
+	private final OutputPersister outputPersister = new NoOutputPersisterImpl();
 	private ClassLoader userClassLoader;
 
 	public DummyEnvironment() {
@@ -216,6 +222,16 @@ public class DummyEnvironment implements Environment {
 	@Override
 	public ResultPartitionWriter[] getAllWriters() {
 		return null;
+	}
+
+	@Override
+	public InputPersister getInputPersister() {
+		return inputPersister;
+	}
+
+	@Override
+	public OutputPersister getOutputPersister() {
+		return outputPersister;
 	}
 
 	@Override

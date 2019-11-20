@@ -23,6 +23,7 @@ import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.NettyShuffleEnvironmentOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
+import org.apache.flink.runtime.io.network.buffer.InputPersister;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.util.ConfigurationParserUtils;
@@ -41,6 +42,7 @@ public class InputProcessorUtil {
 
 	public static CheckpointedInputGate createCheckpointedInputGate(
 			AbstractInvokable toNotifyOnCheckpoint,
+			InputPersister persister,
 			CheckpointingMode checkpointMode,
 			IOManager ioManager,
 			InputGate inputGate,
@@ -52,8 +54,8 @@ public class InputProcessorUtil {
 		BufferStorage bufferStorage = createBufferStorage(
 			checkpointMode, ioManager, pageSize, taskManagerConfig, taskName);
 		CheckpointBarrierHandler barrierHandler = createCheckpointBarrierHandler(
-			checkpointMode, inputGate.getNumberOfInputChannels(), taskName, toNotifyOnCheckpoint);
-		return new CheckpointedInputGate(inputGate, bufferStorage, barrierHandler);
+			checkpointMode, inputGate.getNumberOfInputChannels(), taskName, persister, toNotifyOnCheckpoint);
+		return createCheckpointInputGate(checkpointMode, inputGate, bufferStorage, barrierHandler, 0);
 	}
 
 	/**
@@ -62,6 +64,7 @@ public class InputProcessorUtil {
 	 */
 	public static CheckpointedInputGate[] createCheckpointedInputGatePair(
 			AbstractInvokable toNotifyOnCheckpoint,
+			InputPersister persister,
 			CheckpointingMode checkpointMode,
 			IOManager ioManager,
 			InputGate inputGate1,
@@ -90,26 +93,42 @@ public class InputProcessorUtil {
 			checkpointMode,
 			inputGate1.getNumberOfInputChannels() + inputGate2.getNumberOfInputChannels(),
 			taskName,
+			persister,
 			toNotifyOnCheckpoint);
 		return new CheckpointedInputGate[] {
-			new CheckpointedInputGate(inputGate1, linkedBufferStorage1, barrierHandler),
-			new CheckpointedInputGate(inputGate2, linkedBufferStorage2, barrierHandler, inputGate1.getNumberOfInputChannels())
+			createCheckpointInputGate(checkpointMode, inputGate1, linkedBufferStorage1, barrierHandler, 0),
+			createCheckpointInputGate(checkpointMode, inputGate2, linkedBufferStorage2, barrierHandler, inputGate1.getNumberOfInputChannels())
 		};
+	}
+
+	private static CheckpointedInputGate createCheckpointInputGate(
+			CheckpointingMode checkpointMode,
+			InputGate inputGate,
+			BufferStorage bufferStorage,
+			CheckpointBarrierHandler barrierHandler,
+			int channelIndexOffset) {
+		switch (checkpointMode) {
+			case UNALIGNED_EXACTLY_ONCE:
+				inputGate.registerBufferListener(barrierHandler, channelIndexOffset);
+				return new UnalignedCheckpointedInputGate(inputGate, barrierHandler, channelIndexOffset);
+			default:
+				return new AlignedCheckpointedInputGate(inputGate, bufferStorage, barrierHandler, channelIndexOffset);
+		}
 	}
 
 	private static CheckpointBarrierHandler createCheckpointBarrierHandler(
 			CheckpointingMode checkpointMode,
 			int numberOfInputChannels,
 			String taskName,
+			InputPersister persister,
 			AbstractInvokable toNotifyOnCheckpoint) {
 		switch (checkpointMode) {
 			case EXACTLY_ONCE:
-				return new CheckpointBarrierAligner(
-					numberOfInputChannels,
-					taskName,
-					toNotifyOnCheckpoint);
+				return new CheckpointBarrierAligner(numberOfInputChannels, taskName, toNotifyOnCheckpoint);
 			case AT_LEAST_ONCE:
 				return new CheckpointBarrierTracker(numberOfInputChannels, toNotifyOnCheckpoint);
+			case UNALIGNED_EXACTLY_ONCE:
+				return new UnalignedCheckpointBarrierHandler(numberOfInputChannels, toNotifyOnCheckpoint, persister);
 			default:
 				throw new UnsupportedOperationException("Unrecognized Checkpointing Mode: " + checkpointMode);
 		}

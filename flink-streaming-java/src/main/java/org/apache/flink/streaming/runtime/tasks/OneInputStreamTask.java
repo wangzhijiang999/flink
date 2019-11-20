@@ -112,6 +112,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 
 		return InputProcessorUtil.createCheckpointedInputGate(
 			this,
+			getEnvironment().getInputPersister(),
 			configuration.getCheckpointMode(),
 			getEnvironment().getIOManager(),
 			inputGate,
@@ -137,6 +138,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 			inputGate,
 			inSerializer,
 			getEnvironment().getIOManager(),
+			getEnvironment().getInputPersister(),
 			statusWatermarkValve,
 			0);
 	}

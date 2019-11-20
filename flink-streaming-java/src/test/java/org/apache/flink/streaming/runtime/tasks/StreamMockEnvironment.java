@@ -36,6 +36,10 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.RecordOrEventCollectingResultPartitionWriter;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
+import org.apache.flink.runtime.io.network.buffer.InputPersister;
+import org.apache.flink.runtime.io.network.buffer.NoInputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.NoOutputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.OutputPersister;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.io.network.util.TestPooledBufferProvider;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -112,6 +116,9 @@ public class StreamMockEnvironment implements Environment {
 	private TaskEventDispatcher taskEventDispatcher = mock(TaskEventDispatcher.class);
 
 	private TaskManagerRuntimeInfo taskManagerRuntimeInfo = new TestingTaskManagerRuntimeInfo();
+
+	private final InputPersister inputPersister = new NoInputPersisterImpl();
+	private final OutputPersister outputPersister = new NoOutputPersisterImpl();
 
 	public StreamMockEnvironment(
 		Configuration jobConfig,
@@ -274,6 +281,16 @@ public class StreamMockEnvironment implements Environment {
 		InputGate[] gates = new InputGate[inputs.size()];
 		inputs.toArray(gates);
 		return gates;
+	}
+
+	@Override
+	public InputPersister getInputPersister() {
+		return inputPersister;
+	}
+
+	@Override
+	public OutputPersister getOutputPersister() {
+		return outputPersister;
 	}
 
 	@Override

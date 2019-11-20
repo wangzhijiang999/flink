@@ -27,13 +27,13 @@ import javax.annotation.Nullable;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Tests for the behaviors of the {@link CheckpointedInputGate} with {@link CachedBufferStorage}.
+ * Tests for the behaviors of the {@link AlignedCheckpointedInputGate} with {@link CachedBufferStorage}.
  */
 public class CreditBasedCheckpointBarrierAlignerTest extends CheckpointBarrierAlignerTestBase {
 
 	@Override
-	CheckpointedInputGate createBarrierBuffer(InputGate gate, @Nullable AbstractInvokable toNotify) {
-		return new CheckpointedInputGate(gate, new CachedBufferStorage(PAGE_SIZE), "Testing", toNotify);
+	AlignedCheckpointedInputGate createBarrierBuffer(InputGate gate, @Nullable AbstractInvokable toNotify) {
+		return new AlignedCheckpointedInputGate(gate, new CachedBufferStorage(PAGE_SIZE), "Testing", toNotify);
 	}
 
 	@Override

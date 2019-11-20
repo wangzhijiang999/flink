@@ -32,6 +32,8 @@ import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
+import org.apache.flink.runtime.io.network.buffer.InputPersister;
+import org.apache.flink.runtime.io.network.buffer.OutputPersister;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
@@ -75,6 +77,9 @@ public class RuntimeEnvironment implements Environment {
 	private final ResultPartitionWriter[] writers;
 	private final InputGate[] inputGates;
 
+	private final InputPersister inputPersister;
+	private final OutputPersister outputPersister;
+
 	private final TaskEventDispatcher taskEventDispatcher;
 	
 	private final CheckpointResponder checkpointResponder;
@@ -110,6 +115,8 @@ public class RuntimeEnvironment implements Environment {
 			Map<String, Future<Path>> distCacheEntries,
 			ResultPartitionWriter[] writers,
 			InputGate[] inputGates,
+			InputPersister inputPersister,
+			OutputPersister outputPersister,
 			TaskEventDispatcher taskEventDispatcher,
 			CheckpointResponder checkpointResponder,
 			TaskManagerRuntimeInfo taskManagerInfo,
@@ -135,6 +142,8 @@ public class RuntimeEnvironment implements Environment {
 		this.distCacheEntries = checkNotNull(distCacheEntries);
 		this.writers = checkNotNull(writers);
 		this.inputGates = checkNotNull(inputGates);
+		this.inputPersister = checkNotNull(inputPersister);
+		this.outputPersister = checkNotNull(outputPersister);
 		this.taskEventDispatcher = checkNotNull(taskEventDispatcher);
 		this.checkpointResponder = checkNotNull(checkpointResponder);
 		this.taskManagerInfo = checkNotNull(taskManagerInfo);
@@ -257,6 +266,16 @@ public class RuntimeEnvironment implements Environment {
 	@Override
 	public InputGate[] getAllInputGates() {
 		return inputGates;
+	}
+
+	@Override
+	public InputPersister getInputPersister() {
+		return inputPersister;
+	}
+
+	@Override
+	public OutputPersister getOutputPersister() {
+		return outputPersister;
 	}
 
 	@Override

@@ -23,6 +23,7 @@ import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 
 import java.io.IOException;
+import java.util.Collection;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -73,7 +74,13 @@ public abstract class ResultSubpartition {
 	 * @throws IOException
 	 * 		thrown in case of errors while adding the buffer
 	 */
-	public abstract boolean add(BufferConsumer bufferConsumer) throws IOException;
+	public boolean add(BufferConsumer bufferConsumer) throws IOException {
+		return add(bufferConsumer, false);
+	}
+
+	public abstract boolean add(BufferConsumer bufferConsumer, boolean isBarrierEvent) throws IOException;
+
+	public abstract Collection<BufferConsumer> getQueuedBufferConsumers();
 
 	public abstract void flush();
 

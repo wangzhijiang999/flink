@@ -140,8 +140,6 @@ public class CheckpointBarrierAligner extends CheckpointBarrierHandler {
 						"Barrier id: " + barrierId,
 						CheckpointFailureReason.CHECKPOINT_DECLINED_SUBSUMED));
 
-				// abort the current checkpoint
-				releaseBlocksAndResetBarriers();
 				checkpointAborted = true;
 
 				// begin a the new checkpoint
@@ -295,8 +293,6 @@ public class CheckpointBarrierAligner extends CheckpointBarrierHandler {
 			// let the task know we skip a checkpoint
 			notifyAbort(currentCheckpointId,
 				new CheckpointException(CheckpointFailureReason.CHECKPOINT_DECLINED_INPUT_END_OF_STREAM));
-			// no chance to complete this checkpoint
-			releaseBlocksAndResetBarriers();
 			return true;
 		}
 		return false;

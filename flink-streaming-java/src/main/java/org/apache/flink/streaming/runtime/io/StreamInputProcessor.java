@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.io.AvailabilityProvider;
 
 import java.io.Closeable;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Interface for processing records by {@link org.apache.flink.streaming.runtime.tasks.StreamTask}.
@@ -34,4 +35,10 @@ public interface StreamInputProcessor extends AvailabilityProvider, Closeable {
 	 * state and/or {@link #isAvailable()}.
 	 */
 	InputStatus processInput() throws Exception;
+
+	/**
+	 * Reference the existing buffers in input queue to the
+	 * {@link org.apache.flink.runtime.io.network.buffer.InputPersister}.
+	 */
+	CompletableFuture<?> prepareSnapshot();
 }

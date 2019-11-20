@@ -88,8 +88,8 @@ public class ConsumableNotifyingResultPartitionWriterDecorator implements Result
 	}
 
 	@Override
-	public boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex) throws IOException {
-		boolean success = partitionWriter.addBufferConsumer(bufferConsumer, subpartitionIndex);
+	public boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex, boolean isBarrierEvent) throws IOException {
+		boolean success = partitionWriter.addBufferConsumer(bufferConsumer, subpartitionIndex, isBarrierEvent);
 		if (success) {
 			notifyPipelinedConsumers();
 		}
@@ -122,6 +122,11 @@ public class ConsumableNotifyingResultPartitionWriterDecorator implements Result
 	@Override
 	public void close() throws Exception {
 		partitionWriter.close();
+	}
+
+	@Override
+	public Collection<BufferConsumer> getQueuedBufferConsumers(int subpartitionIndex) {
+		return partitionWriter.getQueuedBufferConsumers(subpartitionIndex);
 	}
 
 	/**

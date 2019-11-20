@@ -117,7 +117,7 @@ public class CheckpointBarrierAlignerAlignmentLimitTest {
 		// the barrier buffer has a limit that only 1000 bytes may be spilled in alignment
 		MockInputGate gate = new MockInputGate(3, Arrays.asList(sequence));
 		AbstractInvokable toNotify = mock(AbstractInvokable.class);
-		CheckpointedInputGate buffer = new CheckpointedInputGate(
+		AlignedCheckpointedInputGate buffer = new AlignedCheckpointedInputGate(
 			gate,
 			new BufferSpiller(ioManager, PAGE_SIZE, 1000),
 			"Testing",
@@ -167,7 +167,7 @@ public class CheckpointBarrierAlignerAlignmentLimitTest {
 		assertFalse(buffer.pollNext().isPresent());
 		assertTrue(buffer.isFinished());
 
-		buffer.cleanup();
+		buffer.close();
 		checkNoTempFilesRemain();
 	}
 
@@ -214,7 +214,7 @@ public class CheckpointBarrierAlignerAlignmentLimitTest {
 		// the barrier buffer has a limit that only 1000 bytes may be spilled in alignment
 		MockInputGate gate = new MockInputGate(3, Arrays.asList(sequence));
 		AbstractInvokable toNotify = mock(AbstractInvokable.class);
-		CheckpointedInputGate buffer = new CheckpointedInputGate(
+		AlignedCheckpointedInputGate buffer = new AlignedCheckpointedInputGate(
 			gate,
 			new BufferSpiller(ioManager, PAGE_SIZE, 500),
 			"Testing",
@@ -270,7 +270,7 @@ public class CheckpointBarrierAlignerAlignmentLimitTest {
 		assertFalse(buffer.pollNext().isPresent());
 		assertTrue(buffer.isFinished());
 
-		buffer.cleanup();
+		buffer.close();
 		checkNoTempFilesRemain();
 	}
 
@@ -315,7 +315,7 @@ public class CheckpointBarrierAlignerAlignmentLimitTest {
 		}
 	}
 
-	private static void validateAlignmentTime(long startTimestamp, CheckpointedInputGate buffer) {
+	private static void validateAlignmentTime(long startTimestamp, AlignedCheckpointedInputGate buffer) {
 		final long elapsed = System.nanoTime() - startTimestamp;
 		assertTrue("wrong alignment time", buffer.getAlignmentDurationNanos() <= elapsed);
 	}

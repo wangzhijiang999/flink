@@ -20,11 +20,14 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
 
+import org.apache.flink.runtime.io.network.buffer.BufferOrEventListener;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Maps;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Sets;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -125,6 +128,16 @@ public class UnionInputGate extends InputGate {
 		this.totalNumberOfInputChannels = currentNumberOfInputChannels;
 	}
 
+	@Override
+	public void registerBufferListener(BufferOrEventListener listener, int indexOffset) {
+		int totalOffset = indexOffset;
+		for (InputGate inputGate : inputGates) {
+			inputGate.registerBufferListener(listener, totalOffset);
+			totalOffset += inputGate.getNumberOfInputChannels();
+		}
+	}
+
+
 	/**
 	 * Returns the total number of input channels across all unioned input gates.
 	 */
@@ -146,6 +159,20 @@ public class UnionInputGate extends InputGate {
 	@Override
 	public Optional<BufferOrEvent> pollNext() throws IOException, InterruptedException {
 		return getNextBufferOrEvent(false);
+	}
+
+	@Override
+	public Collection<Buffer> getQueuedBuffers(int channelIndex) {
+		int totalChannels = 0;
+		for (InputGate inputGate : inputGates) {
+			int numberOfChannels = inputGate.getNumberOfInputChannels();
+			if (numberOfChannels + totalChannels > channelIndex) {
+				inputGate.getQueuedBuffers(channelIndex - totalChannels);
+				break;
+			}
+			totalChannels += numberOfChannels;
+		}
+		throw new IllegalArgumentException("Invalid channel index");
 	}
 
 	private Optional<BufferOrEvent> getNextBufferOrEvent(boolean blocking) throws IOException, InterruptedException {

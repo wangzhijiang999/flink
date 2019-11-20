@@ -25,6 +25,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.Collection;
 
 /**
  * A buffer-oriented runtime result writer API for producing results.
@@ -63,7 +64,17 @@ public interface ResultPartitionWriter extends AutoCloseable {
 	 *
 	 * @return true if operation succeeded and bufferConsumer was enqueued for consumption.
 	 */
-	boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex) throws IOException;
+	default boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex) throws IOException {
+		return addBufferConsumer(bufferConsumer, subpartitionIndex, false);
+	}
+
+	boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex, boolean isBarrierEvent) throws IOException;
+
+	/**
+	 * Reference the existing buffers in output queue into
+	 * {@link org.apache.flink.runtime.io.network.buffer.OutputPersister}.
+	 */
+	Collection<BufferConsumer> getQueuedBufferConsumers(int subpartitionIndex);
 
 	/**
 	 * Manually trigger consumption from enqueued {@link BufferConsumer BufferConsumers} in all subpartitions.

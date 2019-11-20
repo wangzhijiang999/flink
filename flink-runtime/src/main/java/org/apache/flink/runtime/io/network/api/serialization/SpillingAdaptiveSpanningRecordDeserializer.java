@@ -23,10 +23,14 @@ import org.apache.flink.core.memory.DataInputDeserializer;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.MemorySegment;
+import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.FreeingBufferRecycler;
+import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
+import javax.annotation.Nullable;
 import java.io.BufferedInputStream;
 import java.io.EOFException;
 import java.io.File;
@@ -86,6 +90,17 @@ public class SpillingAdaptiveSpanningRecordDeserializer<T extends IOReadableWrit
 		Buffer tmp = currentBuffer;
 		currentBuffer = null;
 		return tmp;
+	}
+
+	@Override
+	@Nullable
+	public Buffer getRemainingBuffer() {
+		if (nonSpanningWrapper.remaining() > 0) {
+			return new NetworkBuffer(nonSpanningWrapper.copyToTargetSegment(), FreeingBufferRecycler.INSTANCE);
+		} else {
+			MemorySegment target = spanningWrapper.copyToTargetSegment();
+			return target != null ? new NetworkBuffer(target, FreeingBufferRecycler.INSTANCE) : null;
+		}
 	}
 
 	@Override
@@ -192,6 +207,12 @@ public class SpillingAdaptiveSpanningRecordDeserializer<T extends IOReadableWrit
 			this.segment = seg;
 			this.position = position;
 			this.limit = leftOverLimit;
+		}
+
+		MemorySegment copyToTargetSegment() {
+			MemorySegment target = MemorySegmentFactory.allocateUnpooledSegment(remaining());
+			segment.copyTo(position, target, 0, remaining());
+			return target;
 		}
 
 		// -------------------------------------------------------------------------------------------------------------
@@ -555,6 +576,22 @@ public class SpillingAdaptiveSpanningRecordDeserializer<T extends IOReadableWrit
 					this.spillFileReader = new DataInputViewStreamWrapper(inStream);
 				}
 			}
+		}
+
+		@Nullable
+		MemorySegment copyToTargetSegment() {
+			if (lengthBuffer.position() > 0) {
+				MemorySegment segment = MemorySegmentFactory.allocateUnpooledSegment(lengthBuffer.remaining());
+				segment.put(0, lengthBuffer, lengthBuffer.remaining());
+				return segment;
+			}
+
+			//TODO we skip the case of large record which size exceeds THRESHOLD_FOR_SPILLING, and it needs to consider reading from spillFile
+			if (recordLength != -1) {
+				return MemorySegmentFactory.wrap(buffer);
+			}
+
+			return null;
 		}
 
 		private void moveRemainderToNonSpanningDeserializer(NonSpanningWrapper deserializer) {

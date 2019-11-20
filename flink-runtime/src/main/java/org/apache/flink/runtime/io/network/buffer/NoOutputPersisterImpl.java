@@ -15,28 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.flink.streaming.runtime.io;
+package org.apache.flink.runtime.io.network.buffer;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.core.fs.RecoverableFsDataOutputStream;
 
-import java.io.Closeable;
+import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Basic interface for inputs of stream operators.
+ * The {@link NoOutputPersisterImpl} takes the buffers and events from a data stream and persists them
+ * asynchronously using {@link RecoverableFsDataOutputStream}.
  */
 @Internal
-public interface StreamTaskInput<T> extends PushingAsyncDataInput<T>, Closeable {
-	int UNSPECIFIED = -1;
+public class NoOutputPersisterImpl implements OutputPersister {
+	private static final CompletableFuture<?> future = CompletableFuture.completedFuture(null);
 
-	/**
-	 * Returns the input index of this input.
-	 */
-	int getInputIndex();
+	public NoOutputPersisterImpl() {
+	}
 
-	/**
-	 * Reference the existing buffers in input queue to the
-	 * {@link org.apache.flink.runtime.io.network.buffer.InputPersister}.
-	 */
-	CompletableFuture<?> prepareSnapshot();
+	@Override
+	public void add(Collection<BufferConsumer> bufferConsumer, int channelId) {
+	}
+
+	@Override
+	public CompletableFuture<?> finish() {
+		return future;
+	}
+
+	@Override
+	public void close() {
+	}
 }

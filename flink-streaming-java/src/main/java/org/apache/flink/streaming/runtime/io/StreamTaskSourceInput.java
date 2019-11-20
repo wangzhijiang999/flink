@@ -62,5 +62,9 @@ public final class StreamTaskSourceInput<T> implements StreamTaskInput<T> {
 	public void close() {
 		IOUtils.closeQuietly(operator::close);
 	}
+
+	@Override
+	public void prepareSnapshot() {
+	}
 }
 

@@ -28,6 +28,7 @@ import org.apache.flink.runtime.io.network.api.serialization.RecordDeserializer;
 import org.apache.flink.runtime.io.network.api.serialization.RecordDeserializer.DeserializationResult;
 import org.apache.flink.runtime.io.network.api.serialization.SpillingAdaptiveSpanningRecordDeserializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.InputPersister;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
@@ -36,8 +37,10 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
 import org.apache.flink.streaming.runtime.streamrecord.StreamElementSerializer;
 import org.apache.flink.streaming.runtime.streamstatus.StatusWatermarkValve;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatus;
+import org.apache.flink.util.IOUtils;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -65,6 +68,8 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 
 	private final RecordDeserializer<DeserializationDelegate<StreamElement>>[] recordDeserializers;
 
+	private final InputPersister inputPersister;
+
 	/** Valve that controls how watermarks and stream statuses are forwarded. */
 	private final StatusWatermarkValve statusWatermarkValve;
 
@@ -79,6 +84,7 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 			CheckpointedInputGate checkpointedInputGate,
 			TypeSerializer<?> inputSerializer,
 			IOManager ioManager,
+			InputPersister inputPersister,
 			StatusWatermarkValve statusWatermarkValve,
 			int inputIndex) {
 		this.checkpointedInputGate = checkpointedInputGate;
@@ -92,6 +98,8 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 				ioManager.getSpillingDirectoriesPaths());
 		}
 
+		this.inputPersister = checkNotNull(inputPersister);
+
 		this.statusWatermarkValve = checkNotNull(statusWatermarkValve);
 		this.inputIndex = inputIndex;
 	}
@@ -102,7 +110,8 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 		TypeSerializer<?> inputSerializer,
 		StatusWatermarkValve statusWatermarkValve,
 		int inputIndex,
-		RecordDeserializer<DeserializationDelegate<StreamElement>>[] recordDeserializers) {
+		RecordDeserializer<DeserializationDelegate<StreamElement>>[] recordDeserializers,
+		InputPersister inputPersister) {
 
 		this.checkpointedInputGate = checkpointedInputGate;
 		this.deserializationDelegate = new NonReusingDeserializationDelegate<>(
@@ -110,6 +119,7 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 		this.recordDeserializers = recordDeserializers;
 		this.statusWatermarkValve = statusWatermarkValve;
 		this.inputIndex = inputIndex;
+		this.inputPersister = inputPersister;
 	}
 
 	@Override
@@ -197,15 +207,37 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 		return checkpointedInputGate.isAvailable();
 	}
 
+	/**
+	 * We need to firstly add the remaining unconsumed buffer in deserializer to the persister, and then
+	 * add the left buffers in the respective channel.
+	 */
 	@Override
-	public void close() throws IOException {
+	public CompletableFuture<?> prepareSnapshot() {
+		for (int channelIndex = 0; channelIndex < recordDeserializers.length; channelIndex++) {
+			//this global index should be consistent with the index in BufferOrEventListener#notifyReceivedBuffer
+			final int globalIndex = channelIndex + checkpointedInputGate.getIndexOffset();
+
+			Buffer partialBuffer = recordDeserializers[channelIndex].getRemainingBuffer();
+			if (partialBuffer != null) {
+				inputPersister.addBuffer(partialBuffer, globalIndex);
+			}
+
+			Collection<Buffer> buffers = checkpointedInputGate.getQueuedBuffers(channelIndex);
+			for (Buffer buffer : buffers) {
+				inputPersister.addBuffer(buffer, globalIndex);
+			}
+		}
+	}
+
+	@Override
+	public void close() {
 		// release the deserializers . this part should not ever fail
 		for (int channelIndex = 0; channelIndex < recordDeserializers.length; channelIndex++) {
 			releaseDeserializer(channelIndex);
 		}
 
 		// cleanup the resources of the checkpointed input gate
-		checkpointedInputGate.cleanup();
+		IOUtils.closeQuietly(checkpointedInputGate);
 	}
 
 	private void releaseDeserializer(int channelIndex) {

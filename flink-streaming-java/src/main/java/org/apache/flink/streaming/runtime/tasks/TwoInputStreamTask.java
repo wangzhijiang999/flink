@@ -61,6 +61,7 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends AbstractTwoInputStreamTas
 		// create a Input instance for each input
 		CheckpointedInputGate[] checkpointedInputGates = InputProcessorUtil.createCheckpointedInputGatePair(
 			this,
+			getEnvironment().getInputPersister(),
 			getConfiguration().getCheckpointMode(),
 			getEnvironment().getIOManager(),
 			unionedInputGate1,
@@ -75,6 +76,7 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends AbstractTwoInputStreamTas
 			inputDeserializer2,
 			getCheckpointLock(),
 			getEnvironment().getIOManager(),
+			getEnvironment().getInputPersister(),
 			getStreamStatusMaintainer(),
 			headOperator,
 			twoInputSelectionHandler,

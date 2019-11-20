@@ -23,6 +23,7 @@ import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.event.AbstractEvent;
+import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.RecordSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSerializer;
@@ -157,7 +158,7 @@ public abstract class RecordWriter<T extends IOReadableWritable> {
 				tryFinishCurrentBufferBuilder(targetChannel);
 
 				// Retain the buffer so that it can be recycled by each channel of targetPartition
-				targetPartition.addBufferConsumer(eventBufferConsumer.copy(), targetChannel);
+				targetPartition.addBufferConsumer(eventBufferConsumer.copy(), targetChannel, event instanceof CheckpointBarrier);
 			}
 
 			if (flushAlways) {

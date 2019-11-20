@@ -193,6 +193,8 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 			}
 		}
 
+		inputGate.notifyReceivedBuffer(next.buffer(), channelIndex);
+
 		numBytesIn.inc(next.buffer().getSize());
 		numBuffersIn.inc();
 		return Optional.of(new BufferAndAvailability(next.buffer(), next.isMoreAvailable(), next.buffersInBacklog()));

@@ -23,6 +23,7 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.BufferOrEventListener;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
@@ -31,6 +32,8 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Random;
 
@@ -60,7 +63,7 @@ public class CheckpointBarrierAlignerMassiveRandomTest {
 					new BufferPool[] { pool1, pool2 },
 					new BarrierGenerator[] { new CountBarrier(100000), new RandomBarrier(100000) });
 
-			CheckpointedInputGate checkpointedInputGate = new CheckpointedInputGate(myIG, new BufferSpiller(ioMan, PAGE_SIZE), "Testing: No task associated", null);
+			AlignedCheckpointedInputGate checkpointedInputGate = new AlignedCheckpointedInputGate(myIG, new BufferSpiller(ioMan, PAGE_SIZE), "Testing: No task associated", null);
 
 			for (int i = 0; i < 2000000; i++) {
 				BufferOrEvent boe = checkpointedInputGate.pollNext().get();
@@ -173,6 +176,15 @@ public class CheckpointBarrierAlignerMassiveRandomTest {
 		@Override
 		public Optional<BufferOrEvent> pollNext() throws IOException, InterruptedException {
 			return getNext();
+		}
+
+		@Override
+		public Collection<Buffer> getQueuedBuffers(int channelIndex) {
+			return Collections.emptyList();
+		}
+
+		@Override
+		public void registerBufferListener(BufferOrEventListener listener, int indexOffset) {
 		}
 
 		@Override

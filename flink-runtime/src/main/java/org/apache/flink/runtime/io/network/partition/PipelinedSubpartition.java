@@ -32,6 +32,7 @@ import javax.annotation.concurrent.GuardedBy;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.Queue;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -90,8 +91,8 @@ class PipelinedSubpartition extends ResultSubpartition {
 	}
 
 	@Override
-	public boolean add(BufferConsumer bufferConsumer) {
-		return add(bufferConsumer, false);
+	public boolean add(BufferConsumer bufferConsumer, boolean isBarrierEvent) {
+		return add(bufferConsumer, false, isBarrierEvent);
 	}
 
 	@Override
@@ -100,7 +101,7 @@ class PipelinedSubpartition extends ResultSubpartition {
 		LOG.debug("{}: Finished {}.", parent.getOwningTaskName(), this);
 	}
 
-	private boolean add(BufferConsumer bufferConsumer, boolean finish) {
+	private boolean add(BufferConsumer bufferConsumer, boolean finish, boolean isBarrierEvent) {
 		checkNotNull(bufferConsumer);
 
 		final boolean notifyDataAvailable;
@@ -111,10 +112,14 @@ class PipelinedSubpartition extends ResultSubpartition {
 			}
 
 			// Add the bufferConsumer and update the stats
-			buffers.add(bufferConsumer);
+			if (isBarrierEvent) {
+				buffers.addFirst(bufferConsumer);
+			} else {
+				buffers.add(bufferConsumer);
+			}
 			updateStatistics(bufferConsumer);
 			increaseBuffersInBacklog(bufferConsumer);
-			notifyDataAvailable = shouldNotifyDataAvailable() || finish;
+			notifyDataAvailable = shouldNotifyDataAvailable(isBarrierEvent) || finish;
 
 			isFinished |= finish;
 		}
@@ -124,6 +129,13 @@ class PipelinedSubpartition extends ResultSubpartition {
 		}
 
 		return true;
+	}
+
+	@Override
+	public Queue<BufferConsumer> getQueuedBufferConsumers() {
+		synchronized (buffers) {
+			return buffers;
+		}
 	}
 
 	@Override
@@ -374,9 +386,9 @@ class PipelinedSubpartition extends ResultSubpartition {
 		}
 	}
 
-	private boolean shouldNotifyDataAvailable() {
+	private boolean shouldNotifyDataAvailable(boolean isBarrierEvent) {
 		// Notify only when we added first finished buffer.
-		return readView != null && !flushRequested && getNumberOfFinishedBuffers() == 1;
+		return readView != null && !flushRequested && (getNumberOfFinishedBuffers() == 1 || isBarrierEvent);
 	}
 
 	private void notifyDataAvailable() {

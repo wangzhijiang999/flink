@@ -22,9 +22,11 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.event.TaskEvent;
+import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.BufferOrEventListener;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider;
@@ -40,10 +42,12 @@ import org.apache.flink.util.function.SupplierWithException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +134,8 @@ public class SingleInputGate extends InputGate {
 	 */
 	private final Map<IntermediateResultPartitionID, InputChannel> inputChannels;
 
+	private InputChannel[] channels;
+
 	/** Channels, which notified this input gate about available data. */
 	private final ArrayDeque<InputChannel> inputChannelsWithData = new ArrayDeque<>();
 
@@ -167,6 +173,12 @@ public class SingleInputGate extends InputGate {
 	private final SupplierWithException<BufferPool, IOException> bufferPoolFactory;
 
 	private final CompletableFuture<Void> closeFuture;
+
+	@Nullable
+	protected BufferOrEventListener listener;
+
+	/** This offset considers both the offset in UnionInputGate and the offset between two inputs case. */
+	protected int globalIndexOffset;
 
 	public SingleInputGate(
 		String owningTaskName,
@@ -240,6 +252,12 @@ public class SingleInputGate extends InputGate {
 
 			requestedPartitionsFlag = true;
 		}
+	}
+
+	@Override
+	public void registerBufferListener(BufferOrEventListener listener, int indexOffset) {
+		this.listener = checkNotNull(listener);
+		this.globalIndexOffset = indexOffset;
 	}
 
 	// ------------------------------------------------------------------------
@@ -320,12 +338,27 @@ public class SingleInputGate extends InputGate {
 		}
 	}
 
-	public void setInputChannel(IntermediateResultPartitionID partitionId, InputChannel inputChannel) {
+	@VisibleForTesting
+	void setInputChannel(IntermediateResultPartitionID partitionId, InputChannel inputChannel) {
 		synchronized (requestLock) {
 			if (inputChannels.put(checkNotNull(partitionId), checkNotNull(inputChannel)) == null
 					&& inputChannel instanceof UnknownInputChannel) {
 
 				numberOfUninitializedChannels++;
+			}
+		}
+	}
+
+	public void setInputChannels(InputChannel[] channels) {
+		synchronized (requestLock) {
+			this.channels = channels;
+			for (InputChannel inputChannel : channels) {
+				IntermediateResultPartitionID partitionId = inputChannel.getPartitionId().getPartitionId();
+				if (inputChannels.put(partitionId, inputChannel) == null
+					&& inputChannel instanceof UnknownInputChannel) {
+
+					numberOfUninitializedChannels++;
+				}
 			}
 		}
 	}
@@ -360,6 +393,7 @@ public class SingleInputGate extends InputGate {
 				LOG.debug("{}: Updated unknown input channel to {}.", owningTaskName, newChannel);
 
 				inputChannels.put(partitionId, newChannel);
+				channels[current.channelIndex] = newChannel;
 
 				if (requestedPartitionsFlag) {
 					newChannel.requestSubpartition(consumedSubpartitionIndex);
@@ -588,6 +622,11 @@ public class SingleInputGate extends InputGate {
 		}
 	}
 
+	@Override
+	public Collection<Buffer> getQueuedBuffers(int channelIndex) {
+		return channels[channelIndex].getQueuedBuffers();
+	}
+
 	// ------------------------------------------------------------------------
 	// Channel notifications
 	// ------------------------------------------------------------------------
@@ -658,6 +697,18 @@ public class SingleInputGate extends InputGate {
 			InputChannel inputChannel = inputChannelsWithData.remove();
 			enqueuedInputChannelsWithData.clear(inputChannel.getChannelIndex());
 			return Optional.of(inputChannel);
+		}
+	}
+
+	void notifyReceivedBuffer(Buffer buffer, int channelIndex) throws IOException {
+		if (listener != null) {
+			listener.notifyReceivedBuffer(buffer, channelIndex + globalIndexOffset);
+		}
+	}
+
+	void notifyReceivedBarrier(CheckpointBarrier barrier, int channelIndex) throws IOException {
+		if (listener != null) {
+			listener.notifyReceivedBarrier(barrier, channelIndex + globalIndexOffset);
 		}
 	}
 

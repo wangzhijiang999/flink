@@ -34,6 +34,10 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.RecordCollectingResultPartitionWriter;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
+import org.apache.flink.runtime.io.network.buffer.InputPersister;
+import org.apache.flink.runtime.io.network.buffer.NoInputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.NoOutputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.OutputPersister;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.IteratorWrappingTestSingleInputGate;
 import org.apache.flink.runtime.io.network.util.TestPooledBufferProvider;
@@ -89,6 +93,10 @@ public class MockEnvironment implements Environment, AutoCloseable {
 	private final List<InputGate> inputs;
 
 	private final List<ResultPartitionWriter> outputs;
+
+	private final InputPersister inputPersister;
+
+	private final OutputPersister outputPersister;
 
 	private final JobID jobID;
 
@@ -163,6 +171,9 @@ public class MockEnvironment implements Environment, AutoCloseable {
 		this.aggregateManager = Preconditions.checkNotNull(aggregateManager);
 
 		this.taskMetricGroup = taskMetricGroup;
+
+		this.inputPersister = new NoInputPersisterImpl();
+		this.outputPersister = new NoOutputPersisterImpl();
 	}
 
 	public IteratorWrappingTestSingleInputGate<Record> addInput(MutableObjectIterator<Record> inputIterator) {
@@ -261,6 +272,16 @@ public class MockEnvironment implements Environment, AutoCloseable {
 	@Override
 	public InputGate getInputGate(int index) {
 		return inputs.get(index);
+	}
+
+	@Override
+	public InputPersister getInputPersister() {
+		return inputPersister;
+	}
+
+	@Override
+	public OutputPersister getOutputPersister() {
+		return outputPersister;
 	}
 
 	@Override

@@ -21,6 +21,7 @@ package org.apache.flink.runtime.io.network.api.serialization;
 import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 
 /**
@@ -59,6 +60,9 @@ public interface RecordDeserializer<T extends IOReadableWritable> {
 	void setNextBuffer(Buffer buffer) throws IOException;
 
 	Buffer getCurrentBuffer();
+
+	@Nullable
+	Buffer getRemainingBuffer();
 
 	void clear();
 

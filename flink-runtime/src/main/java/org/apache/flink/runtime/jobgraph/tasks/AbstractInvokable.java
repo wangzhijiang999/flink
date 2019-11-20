@@ -26,6 +26,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.taskmanager.Task;
 
+import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.Future;
 
@@ -253,7 +254,7 @@ public abstract class AbstractInvokable {
 	 * @param checkpointId The ID of the checkpoint to be aborted.
 	 * @param cause The reason why the checkpoint was aborted during alignment
 	 */
-	public void abortCheckpointOnBarrier(long checkpointId, Throwable cause) throws Exception {
+	public void abortCheckpointOnBarrier(long checkpointId, Throwable cause) throws IOException {
 		throw new UnsupportedOperationException(String.format("abortCheckpointOnBarrier not supported by %s", this.getClass().getName()));
 	}
 

@@ -78,6 +78,11 @@ public final class StreamOneInputProcessor<IN> implements StreamInputProcessor {
 	}
 
 	@Override
+	public CompletableFuture<?> prepareSnapshot() {
+		return input.prepareSnapshot();
+	}
+
+	@Override
 	public void close() throws IOException {
 		input.close();
 	}

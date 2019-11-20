@@ -21,10 +21,13 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentProvider;
+import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.ConnectionManager;
 import org.apache.flink.runtime.io.network.PartitionRequestClient;
+import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
+import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferListener;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
@@ -108,6 +111,9 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 	/** Global memory segment provider to request and recycle exclusive buffers (only for credit-based). */
 	@Nonnull
 	private final MemorySegmentProvider memorySegmentProvider;
+
+	@GuardedBy("receivedBuffers")
+	private boolean isBufferWaitingForPersisting;
 
 	public RemoteInputChannel(
 		SingleInputGate inputGate,
@@ -204,6 +210,14 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 		numBytesIn.inc(next.getSize());
 		numBuffersIn.inc();
 		return Optional.of(new BufferAndAvailability(next, moreAvailable, getSenderBacklog()));
+	}
+
+	@Override
+	public Collection<Buffer> getQueuedBuffers() {
+		synchronized (receivedBuffers) {
+			isBufferWaitingForPersisting = true;
+			return Collections.unmodifiableCollection(receivedBuffers);
+		}
 	}
 
 	// ------------------------------------------------------------------------
@@ -504,12 +518,13 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 		}
 	}
 
-	public void onBuffer(Buffer buffer, int sequenceNumber, int backlog) throws IOException {
+	public void onBuffer(Buffer buffer, int sequenceNumber, int backlog) throws Exception {
 		boolean recycleBuffer = true;
 
 		try {
 
 			final boolean wasEmpty;
+			final boolean shouldNotifyBuffer;
 			synchronized (receivedBuffers) {
 				// Similar to notifyBufferAvailable(), make sure that we never add a buffer
 				// after releaseAllResources() released all buffers from receivedBuffers
@@ -526,6 +541,9 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 				wasEmpty = receivedBuffers.isEmpty();
 				receivedBuffers.add(buffer);
 				recycleBuffer = false;
+
+				// we need to judge the flag in synchronized region because isBufferWaitingForPersisting might be updated by task thread
+				shouldNotifyBuffer = (buffer.isBuffer() && isBufferWaitingForPersisting);
 			}
 
 			++expectedSequenceNumber;
@@ -537,9 +555,25 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 			if (backlog >= 0) {
 				onSenderBacklog(backlog);
 			}
+
+			if (shouldNotifyBuffer) {
+				inputGate.notifyReceivedBuffer(buffer, channelIndex);
+			}
+			notifyBarrier(buffer);
 		} finally {
 			if (recycleBuffer) {
 				buffer.recycleBuffer();
+			}
+		}
+	}
+
+	private void notifyBarrier(Buffer buffer) throws IOException {
+		if (!buffer.isBuffer()) {
+			AbstractEvent event = EventSerializer.fromBuffer(buffer, getClass().getClassLoader());
+			if (event.getClass() == CheckpointBarrier.class) {
+				// the flag do not need to synchronized here because it is only accessed by the same thread
+				isBufferWaitingForPersisting = false;
+				inputGate.notifyReceivedBarrier((CheckpointBarrier) event, channelIndex);
 			}
 		}
 	}

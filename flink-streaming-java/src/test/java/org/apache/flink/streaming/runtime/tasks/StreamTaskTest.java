@@ -1217,6 +1217,9 @@ public class StreamTaskTest extends TestLogger {
 			return AVAILABLE;
 		}
 
+		public void prepareSnapshot() {
+		}
+
 		public void finishInput() {
 			isFinished = true;
 		}

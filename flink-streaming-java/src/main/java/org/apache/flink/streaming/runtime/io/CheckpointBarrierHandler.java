@@ -24,6 +24,8 @@ import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.BufferOrEventListener;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 
 import javax.annotation.Nullable;
@@ -35,11 +37,11 @@ import java.io.IOException;
  * Different implementations may either simply track barriers, or block certain inputs on
  * barriers.
  */
-public abstract class CheckpointBarrierHandler {
+public abstract class CheckpointBarrierHandler implements BufferOrEventListener {
 
 	/** The listener to be notified on complete checkpoints. */
 	@Nullable
-	private final AbstractInvokable toNotifyOnCheckpoint;
+	protected final AbstractInvokable toNotifyOnCheckpoint;
 
 	public CheckpointBarrierHandler(@Nullable AbstractInvokable toNotifyOnCheckpoint) {
 		this.toNotifyOnCheckpoint = toNotifyOnCheckpoint;
@@ -85,6 +87,7 @@ public abstract class CheckpointBarrierHandler {
 				.setBytesBufferedInAlignment(bufferedBytes)
 				.setAlignmentDurationNanos(alignmentDurationNanos);
 
+			//TODO enqueue the letter into mailbox
 			toNotifyOnCheckpoint.triggerCheckpointOnBarrier(
 				checkpointMetaData,
 				checkpointBarrier.getCheckpointOptions(),
@@ -97,9 +100,14 @@ public abstract class CheckpointBarrierHandler {
 			new CheckpointException(CheckpointFailureReason.CHECKPOINT_DECLINED_ON_CANCELLATION_BARRIER));
 	}
 
-	protected void notifyAbort(long checkpointId, CheckpointException cause) throws Exception {
+	protected void notifyAbort(long checkpointId, CheckpointException cause) throws IOException {
 		if (toNotifyOnCheckpoint != null) {
 			toNotifyOnCheckpoint.abortCheckpointOnBarrier(checkpointId, cause);
 		}
+		releaseBlocksAndResetBarriers();
+	}
+
+	@Override
+	public void notifyBufferReceived(Buffer buffer, int channelIndex) throws IOException {
 	}
 }

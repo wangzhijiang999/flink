@@ -46,7 +46,7 @@ public class CheckpointBarrierTrackerTest {
 
 	private static final int PAGE_SIZE = 512;
 
-	private CheckpointedInputGate inputGate;
+	private AlignedCheckpointedInputGate inputGate;
 
 	@After
 	public void ensureEmpty() throws Exception {
@@ -365,16 +365,16 @@ public class CheckpointBarrierTrackerTest {
 	// ------------------------------------------------------------------------
 	//  Utils
 	// ------------------------------------------------------------------------
-	private static CheckpointedInputGate createBarrierTracker(int numberOfChannels, BufferOrEvent[] sequence) {
+	private static AlignedCheckpointedInputGate createBarrierTracker(int numberOfChannels, BufferOrEvent[] sequence) {
 		return createBarrierTracker(numberOfChannels, sequence, null);
 	}
 
-	private static CheckpointedInputGate createBarrierTracker(
+	private static AlignedCheckpointedInputGate createBarrierTracker(
 			int numberOfChannels,
 			BufferOrEvent[] sequence,
 			@Nullable AbstractInvokable toNotifyOnCheckpoint) {
 		MockInputGate gate = new MockInputGate(numberOfChannels, Arrays.asList(sequence));
-		return new CheckpointedInputGate(
+		return new AlignedCheckpointedInputGate(
 			gate,
 			new CachedBufferStorage(PAGE_SIZE, -1, "Testing"),
 			new CheckpointBarrierTracker(gate.getNumberOfInputChannels(), toNotifyOnCheckpoint));

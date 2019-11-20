@@ -20,11 +20,14 @@ package org.apache.flink.runtime.taskmanager;
 
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.event.TaskEvent;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.BufferOrEventListener;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -73,6 +76,16 @@ public class InputGateWithMetrics extends InputGate {
 	@Override
 	public Optional<BufferOrEvent> pollNext() throws IOException, InterruptedException {
 		return inputGate.pollNext().map(this::updateMetrics);
+	}
+
+	@Override
+	public Collection<Buffer> getQueuedBuffers(int channelIndex) {
+		return inputGate.getQueuedBuffers(channelIndex);
+	}
+
+	@Override
+	public void registerBufferListener(BufferOrEventListener listener, int indexOffset) {
+		inputGate.registerBufferListener(listener, indexOffset);
 	}
 
 	@Override

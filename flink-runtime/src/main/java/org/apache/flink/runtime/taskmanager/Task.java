@@ -23,10 +23,13 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.TaskInfo;
 import org.apache.flink.api.common.cache.DistributedCache;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.core.fs.RecoverableWriter;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.blob.BlobCacheService;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
@@ -51,6 +54,12 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
+import org.apache.flink.runtime.io.network.buffer.InputPersister;
+import org.apache.flink.runtime.io.network.buffer.InputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.NoInputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.NoOutputPersisterImpl;
+import org.apache.flink.runtime.io.network.buffer.OutputPersister;
+import org.apache.flink.runtime.io.network.buffer.OutputPersisterImpl;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
@@ -659,6 +668,8 @@ public class Task implements Runnable, TaskActions, PartitionProducerStateProvid
 				distributedCacheEntries,
 				consumableNotifyingPartitionWriters,
 				inputGates,
+				createInputPersister(),
+				createOutputPersister(),
 				taskEventDispatcher,
 				checkpointResponder,
 				taskManagerConfig,
@@ -834,6 +845,43 @@ public class Task implements Runnable, TaskActions, PartitionProducerStateProvid
 				LOG.error("Error during metrics de-registration of task {} ({}).", taskNameWithSubtask, executionId, t);
 			}
 		}
+	}
+
+	private InputPersister createInputPersister() throws IOException {
+		String persistLocation = jobConfiguration.getString(CheckpointingOptions.PERSIST_LOCATION_CONFIG);
+		int numInputChannels = 0;
+		for (InputGate inputGate : inputGates) {
+			numInputChannels += inputGate.getNumberOfInputChannels();
+		}
+
+		InputPersister inputPersister;
+		if (numInputChannels == 0 || persistLocation == null) {
+			inputPersister = new NoInputPersisterImpl();
+		} else {
+			Path path = new Path(persistLocation, executionId.toHexString());
+			RecoverableWriter fileSystemWriter = FileSystem.get(path.toUri()).createRecoverableWriter();
+			inputPersister = new InputPersisterImpl(fileSystemWriter, path, numInputChannels);
+		}
+
+		return inputPersister;
+	}
+
+	private OutputPersister createOutputPersister() throws IOException {
+		String persistLocation = jobConfiguration.getString(CheckpointingOptions.PERSIST_LOCATION_CONFIG);
+		int numOutputChannels = 0;
+		for (ResultPartitionWriter writer : consumableNotifyingPartitionWriters) {
+			numOutputChannels += writer.getNumberOfSubpartitions();
+		}
+
+		OutputPersister outputPersister;
+		if (numOutputChannels == 0 || persistLocation == null) {
+			outputPersister = new NoOutputPersisterImpl();
+		} else {
+			Path path = new Path(persistLocation, executionId.toHexString());
+			outputPersister = new OutputPersisterImpl(path);
+		}
+
+		return outputPersister;
 	}
 
 	@VisibleForTesting

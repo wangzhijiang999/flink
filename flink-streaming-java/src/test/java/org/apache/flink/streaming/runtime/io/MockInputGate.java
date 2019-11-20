@@ -20,10 +20,14 @@ package org.apache.flink.streaming.runtime.io;
 
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.BufferOrEventListener;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 
 import java.util.ArrayDeque;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
@@ -95,6 +99,15 @@ public class MockInputGate extends InputGate {
 	@Override
 	public Optional<BufferOrEvent> pollNext() {
 		return getNext();
+	}
+
+	@Override
+	public Collection<Buffer> getQueuedBuffers(int channelIndex) {
+		return Collections.EMPTY_LIST;
+	}
+
+	@Override
+	public void registerBufferListener(BufferOrEventListener listener, int indexOffset) {
 	}
 
 	@Override

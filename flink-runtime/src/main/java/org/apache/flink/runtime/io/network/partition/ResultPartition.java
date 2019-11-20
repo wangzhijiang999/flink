@@ -23,7 +23,6 @@ import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
-import org.apache.flink.runtime.io.network.buffer.BufferPersister;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.BufferPoolOwner;
 import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
@@ -38,6 +37,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
@@ -99,9 +99,6 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 
 	private final FunctionWithException<BufferPoolOwner, BufferPool, IOException> bufferPoolFactory;
 
-	@Nullable
-	private final BufferPersister bufferPersister;
-
 	public ResultPartition(
 		String owningTaskName,
 		ResultPartitionID partitionId,
@@ -118,7 +115,6 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 		this.numTargetKeyGroups = numTargetKeyGroups;
 		this.partitionManager = checkNotNull(partitionManager);
 		this.bufferPoolFactory = bufferPoolFactory;
-		this.bufferPersister = null;
 	}
 
 	/**
@@ -187,24 +183,25 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 	}
 
 	@Override
-	public boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex) throws IOException {
+	public boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex, boolean isBarrierEvent) throws IOException {
 		checkNotNull(bufferConsumer);
 
 		ResultSubpartition subpartition;
 		try {
 			checkInProduceState();
 			subpartition = subpartitions[subpartitionIndex];
-
-			if (bufferPersister != null) {
-				bufferPersister.add(bufferConsumer.copy(), subpartitionIndex);
-			}
 		}
 		catch (Exception ex) {
 			bufferConsumer.close();
 			throw ex;
 		}
 
-		return subpartition.add(bufferConsumer);
+		return subpartition.add(bufferConsumer, isBarrierEvent);
+	}
+
+	@Override
+	public Collection<BufferConsumer> getQueuedBufferConsumers(int subpartitionIndex) {
+		return subpartitions[subpartitionIndex].getQueuedBufferConsumers();
 	}
 
 	@Override
@@ -212,20 +209,11 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 		for (ResultSubpartition subpartition : subpartitions) {
 			subpartition.flush();
 		}
-		if (bufferPersister != null) {
-			// TODO: this is a trade off: trigger flush notification and having less data to persist
-			// during the checkpoint at a cost of the flush notification. Probably the cost of
-			// flush notification is minuscule compared to the cost of writing the data...
-			bufferPersister.flushAll();
-		}
 	}
 
 	@Override
 	public void flush(int subpartitionIndex) {
 		subpartitions[subpartitionIndex].flush();
-		if (bufferPersister != null) {
-			bufferPersister.flush(subpartitionIndex);
-		}
 	}
 
 	/**

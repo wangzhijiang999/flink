@@ -18,6 +18,7 @@
 package org.apache.flink.runtime.io.network.buffer;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.fs.RecoverableFsDataOutputStream;
 import org.apache.flink.core.fs.RecoverableWriter;
@@ -31,115 +32,60 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
 /**
- * The {@link BufferPersister} takes the buffers and events from a data stream and persists them
+ * The {@link OutputPersisterImpl} takes the buffers and events from a data stream and persists them
  * asynchronously using {@link RecoverableFsDataOutputStream}.
  */
 @Internal
-public class BufferPersister implements AutoCloseable {
+public class OutputPersisterImpl implements OutputPersister {
 
-	private final Channel[] channels;
 	private final Writer writer;
 
-	public BufferPersister(
-			RecoverableWriter recoverableWriter,
-			Path recoverableWriterBasePath,
-			int numberOfChannels) throws IOException {
-		writer = new Writer(recoverableWriter, recoverableWriterBasePath);
-		channels = new Channel[numberOfChannels];
-		for (int i = 0; i < channels.length; i++) {
-			channels[i] = new Channel();
-		}
+	public OutputPersisterImpl(Path path) throws IOException {
+		writer = new Writer(FileSystem.get(path.toUri()).createRecoverableWriter(), path);
 		writer.start();
 	}
 
-	public void add(BufferConsumer bufferConsumer, int channelId) {
-		// do not spill the currently being added bufferConsumer, as it's empty
-		spill(channels[channelId]);
-		channels[channelId].pendingBuffers.add(bufferConsumer);
+	@Override
+	public void add(Collection<BufferConsumer> bufferConsumers, int channelId) {
+		writer.add(bufferConsumers);
 	}
 
-	public CompletableFuture<?> persist() throws IOException {
-		flushAll();
-		return writer.persist();
+	@Override
+	public CompletableFuture<?> finish() throws IOException {
+		return writer.finish();
 	}
 
 	@Override
 	public void close() throws IOException, InterruptedException {
 		writer.close();
-
-		releaseMemory();
-	}
-
-	private void releaseMemory() {
-		for (Channel channel : channels) {
-			while (!channel.pendingBuffers.isEmpty()) {
-				channel.pendingBuffers.poll().close();
-			}
-		}
-	}
-
-	public long getPendingBytes() {
-		throw new UnsupportedOperationException("We should implement some metrics");
-	}
-
-	public void flushAll() {
-		for (Channel channel : channels) {
-			spill(channel);
-		}
-	}
-
-	public void flush(int channelId) {
-		spill(channels[channelId]);
-	}
-
-	/**
-	 * @return true if moved enqueued some data
-	 */
-	private boolean spill(Channel channel) {
-		boolean writtenSomething = false;
-		while (!channel.pendingBuffers.isEmpty()) {
-			BufferConsumer bufferConsumer = channel.pendingBuffers.peek();
-			Buffer buffer = bufferConsumer.build();
-			if (buffer.readableBytes() > 0) {
-				writer.add(buffer);
-				writtenSomething = true;
-			}
-			if (bufferConsumer.isFinished()) {
-				bufferConsumer.close();
-				channel.pendingBuffers.pop();
-			}
-			else {
-				break;
-			}
-		}
-		return writtenSomething;
-	}
-
-	private static class Channel {
-		ArrayDeque<BufferConsumer> pendingBuffers = new ArrayDeque<>();
 	}
 
 	private static class Writer extends Thread implements AutoCloseable {
 		private static final Logger LOG = LoggerFactory.getLogger(Writer.class);
-		private static final Buffer PERSIST_MARKER = new NetworkBuffer(MemorySegmentFactory.allocateUnpooledSegment(42), memorySegment -> {});
 
-		private volatile boolean running = true;
+		private static final BufferConsumer FINISH_MARKER = new BufferConsumer(
+			MemorySegmentFactory.allocateUnpooledSegment(42),
+			memorySegment -> {},
+			false);
 
-		private final Queue<Buffer> handover = new ArrayDeque<>();
+		private final Queue<BufferConsumer> handover = new ArrayDeque<>();
 		private final RecoverableWriter recoverableWriter;
 		private final Path recoverableWriterBasePath;
 
 		@Nullable
 		private Throwable asyncException;
 		private int partId;
-		private CompletableFuture<?> persistFuture = CompletableFuture.completedFuture(null);
+		private CompletableFuture<?> finishFuture = CompletableFuture.completedFuture(null);
 		private RecoverableFsDataOutputStream currentOutputStream;
+
+		private volatile boolean running = true;
 
 		public Writer(RecoverableWriter recoverableWriter, Path recoverableWriterBasePath) throws IOException {
 			this.recoverableWriter = recoverableWriter;
@@ -148,24 +94,36 @@ public class BufferPersister implements AutoCloseable {
 			openNewOutputStream();
 		}
 
-		public synchronized void add(Buffer buffer) {
+		public synchronized void add(BufferConsumer bufferConsumer) {
 			checkErroneousUnsafe();
+
 			boolean wasEmpty = handover.isEmpty();
-			handover.add(buffer);
+			handover.add(bufferConsumer);
 			if (wasEmpty) {
 				notify();
 			}
 		}
 
-		public synchronized CompletableFuture<?> persist() throws IOException {
+		public synchronized void add(Collection<BufferConsumer> bufferConsumers) {
 			checkErroneousUnsafe();
-			checkState(persistFuture.isDone(), "TODO support multiple pending persist requests (multiple ongoing checkpoints?)");
-			if (persistFuture.isDone()) {
-				persistFuture = new CompletableFuture<>();
-			}
-			add(PERSIST_MARKER);
 
-			return persistFuture;
+			boolean wasEmpty = handover.isEmpty();
+			handover.addAll(bufferConsumers);
+			if (wasEmpty) {
+				notify();
+			}
+		}
+
+		public synchronized CompletableFuture<?> finish() {
+			checkErroneousUnsafe();
+			checkState(finishFuture.isDone(), "TODO support multiple pending persist requests (multiple ongoing checkpoints?)");
+
+			if (finishFuture.isDone()) {
+				finishFuture = new CompletableFuture<>();
+			}
+			add(FINISH_MARKER);
+
+			return finishFuture;
 		}
 
 		public synchronized void checkErroneous() {
@@ -184,11 +142,11 @@ public class BufferPersister implements AutoCloseable {
 					if (running) {
 						asyncException = t;
 					}
-					if (!persistFuture.isDone()) {
-						persistFuture.completeExceptionally(t);
+					if (!finishFuture.isDone()) {
+						finishFuture.completeExceptionally(t);
 					}
 				}
-				LOG.error("unhandled exception in the Writer", t);
+				LOG.error("unhandled exception in the writer", t);
 			}
 		}
 
@@ -206,18 +164,28 @@ public class BufferPersister implements AutoCloseable {
 		}
 
 		private synchronized Buffer get() throws InterruptedException, IOException {
-			while (handover.isEmpty()) {
-				wait();
-			}
-			Buffer buffer = handover.poll();
-			if (buffer == PERSIST_MARKER) {
-				currentOutputStream.closeForCommit().commit();
-				openNewOutputStream();
-				persistFuture.complete(null);
-				return get();
-			}
+			while (true) {
+				BufferConsumer bufferConsumer = handover.poll();
+				if (bufferConsumer == null) {
+					wait();
+					continue;
+				}
 
-			return buffer;
+				if (bufferConsumer == FINISH_MARKER) {
+					currentOutputStream.closeForCommit().commit();
+					finishFuture.complete(null);
+					assert handover.isEmpty();
+					continue;
+				}
+
+				Buffer buffer = bufferConsumer.build();
+				if (bufferConsumer.isFinished()) {
+					bufferConsumer.close();
+				}
+				if (buffer.readableBytes() > 0) {
+					return buffer;
+				}
+			}
 		}
 
 		@Override

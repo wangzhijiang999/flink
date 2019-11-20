@@ -38,6 +38,7 @@ import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriterBuilder;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
+import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
@@ -80,11 +81,14 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -786,7 +790,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	}
 
 	@Override
-	public void abortCheckpointOnBarrier(long checkpointId, Throwable cause) throws Exception {
+	public void abortCheckpointOnBarrier(long checkpointId, Throwable cause) throws IOException {
 		LOG.debug("Aborting checkpoint via cancel-barrier {} for task {}", checkpointId, getName());
 
 		// notify the coordinator that we decline this checkpoint
@@ -829,13 +833,16 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				//           The pre-barrier work should be nothing or minimal in the common case.
 				operatorChain.prepareSnapshotPreBarrier(checkpointId);
 
-				// Step (2): Send the checkpoint barrier downstream
+				// Step (2): Reference the input and output buffers to be spilled.
+				prepareSnapshotForInputOutput();
+
+				// Step (3): Send the checkpoint barrier downstream
 				operatorChain.broadcastCheckpointBarrier(
 						checkpointId,
 						checkpointMetaData.getTimestamp(),
 						checkpointOptions);
 
-				// Step (3): Take the state snapshot. This should be largely asynchronous, to not
+				// Step (4): Take the state snapshot. This should be largely asynchronous, to not
 				//           impact progress of the streaming topology
 				checkpointState(checkpointMetaData, checkpointOptions, checkpointMetrics);
 
@@ -867,6 +874,25 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				return false;
 			}
 		}
+	}
+
+	private CompletableFuture<?> prepareSnapshotForInputOutput() throws IOException {
+		// For source task we do not have input processor
+		if (inputProcessor != null) {
+			inputProcessor.prepareSnapshot();
+		}
+
+		int indexOffset = 0;
+		for (ResultPartitionWriter writer : getEnvironment().getAllWriters()) {
+			for (int i = 0; i < writer.getNumberOfSubpartitions(); i++) {
+				Collection<BufferConsumer> bufferConsumers = writer.getQueuedBufferConsumers(i);
+				getEnvironment().getOutputPersister().add(bufferConsumers, i + indexOffset);
+			}
+			indexOffset += writer.getNumberOfSubpartitions();
+		}
+
+		//TODO also combine the input future
+		return getEnvironment().getOutputPersister().finish();
 	}
 
 	protected void declineCheckpoint(long checkpointId) {
