@@ -23,6 +23,7 @@ import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 
 import java.io.IOException;
+import java.util.Collection;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -69,11 +70,19 @@ public abstract class ResultSubpartition {
 	 *
 	 * @param bufferConsumer
 	 * 		the buffer to add (transferring ownership to this writer)
+	 * @param insertAsHead
+	 *      whether the added buffer should be inserted into the front of queue .
 	 * @return true if operation succeeded and bufferConsumer was enqueued for consumption.
 	 * @throws IOException
 	 * 		thrown in case of errors while adding the buffer
 	 */
-	public abstract boolean add(BufferConsumer bufferConsumer) throws IOException;
+	public abstract boolean add(BufferConsumer bufferConsumer, boolean insertAsHead) throws IOException;
+
+	public boolean add(BufferConsumer bufferConsumer) throws IOException {
+		return add(bufferConsumer, false);
+	}
+
+	public abstract Collection<Buffer> getInflightBuffers();
 
 	public abstract void flush();
 

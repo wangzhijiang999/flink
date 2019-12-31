@@ -32,6 +32,7 @@ import javax.annotation.concurrent.GuardedBy;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.Collection;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -83,6 +84,9 @@ class PipelinedSubpartition extends ResultSubpartition {
 	/** The total number of bytes (both data and event buffers). */
 	private long totalNumberOfBytes;
 
+	/** The collection of buffers which are spanned over by checkpoint barrier and needs to be persisted for snapshot. */
+	private final ArrayDeque<Buffer> inflightBuffers = new ArrayDeque<>();
+
 	// ------------------------------------------------------------------------
 
 	PipelinedSubpartition(int index, ResultPartition parent) {
@@ -90,17 +94,17 @@ class PipelinedSubpartition extends ResultSubpartition {
 	}
 
 	@Override
-	public boolean add(BufferConsumer bufferConsumer) {
-		return add(bufferConsumer, false);
+	public boolean add(BufferConsumer bufferConsumer, boolean insertAsHead) {
+		return add(bufferConsumer, false, insertAsHead);
 	}
 
 	@Override
 	public void finish() throws IOException {
-		add(EventSerializer.toBufferConsumer(EndOfPartitionEvent.INSTANCE), true);
+		add(EventSerializer.toBufferConsumer(EndOfPartitionEvent.INSTANCE), true, false);
 		LOG.debug("{}: Finished {}.", parent.getOwningTaskName(), this);
 	}
 
-	private boolean add(BufferConsumer bufferConsumer, boolean finish) {
+	private boolean add(BufferConsumer bufferConsumer, boolean finish, boolean insertAsHead) {
 		checkNotNull(bufferConsumer);
 
 		final boolean notifyDataAvailable;
@@ -111,7 +115,7 @@ class PipelinedSubpartition extends ResultSubpartition {
 			}
 
 			// Add the bufferConsumer and update the stats
-			buffers.add(bufferConsumer);
+			handleAddingBarrier(bufferConsumer, insertAsHead);
 			updateStatistics(bufferConsumer);
 			increaseBuffersInBacklog(bufferConsumer);
 			notifyDataAvailable = shouldNotifyDataAvailable() || finish;
@@ -124,6 +128,33 @@ class PipelinedSubpartition extends ResultSubpartition {
 		}
 
 		return true;
+	}
+
+	private void handleAddingBarrier(BufferConsumer bufferConsumer, boolean insertAsHead) {
+		assert Thread.holdsLock(buffers);
+		if (insertAsHead) {
+			// Note here we assume there is only one checkpoint triggered at a time. If we want to support
+			// multiple checkpoints running at the same time, we need maintain a map for in-flight buffers.
+			inflightBuffers.clear();
+
+			// Meanwhile prepare the collection of in-flight buffers which would be fetched in the next step later.
+			for (BufferConsumer buffer : buffers) {
+				BufferConsumer bc = buffer.copy();
+				inflightBuffers.add(bc.build());
+				if (bc.isFinished()) {
+					bc.close();
+				}
+			}
+
+			buffers.addFirst(bufferConsumer);
+		} else {
+			buffers.add(bufferConsumer);
+		}
+	}
+
+	@Override
+	public Collection<Buffer> getInflightBuffers() {
+		return inflightBuffers;
 	}
 
 	@Override

@@ -23,6 +23,7 @@ import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.event.AbstractEvent;
+import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.RecordSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSerializer;
@@ -85,7 +86,9 @@ public abstract class RecordWriter<T extends IOReadableWritable> {
 	/** To avoid synchronization overhead on the critical path, best-effort error tracking is enough here.*/
 	private Throwable flusherException;
 
-	RecordWriter(ResultPartitionWriter writer, long timeout, String taskName) {
+	private final boolean isUnalignedCheckpoint;
+
+	RecordWriter(ResultPartitionWriter writer, long timeout, String taskName, boolean isUnalignedCheckpoint) {
 		this.targetPartition = writer;
 		this.numberOfChannels = writer.getNumberOfSubpartitions();
 
@@ -103,6 +106,7 @@ public abstract class RecordWriter<T extends IOReadableWritable> {
 			outputFlusher = new OutputFlusher(threadName, timeout);
 			outputFlusher.start();
 		}
+		this.isUnalignedCheckpoint = isUnalignedCheckpoint;
 	}
 
 	protected void emit(T record, int targetChannel) throws IOException, InterruptedException {
@@ -157,7 +161,10 @@ public abstract class RecordWriter<T extends IOReadableWritable> {
 				tryFinishCurrentBufferBuilder(targetChannel);
 
 				// Retain the buffer so that it can be recycled by each channel of targetPartition
-				targetPartition.addBufferConsumer(eventBufferConsumer.copy(), targetChannel);
+				targetPartition.addBufferConsumer(
+					eventBufferConsumer.copy(),
+					targetChannel,
+					isUnalignedCheckpoint && event instanceof CheckpointBarrier);
 			}
 
 			if (flushAlways) {

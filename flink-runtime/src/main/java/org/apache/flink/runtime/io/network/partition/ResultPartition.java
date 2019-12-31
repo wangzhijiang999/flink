@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
@@ -187,7 +188,7 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 	}
 
 	@Override
-	public boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex) throws IOException {
+	public boolean addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex, boolean insertAsHead) throws IOException {
 		checkNotNull(bufferConsumer);
 
 		ResultSubpartition subpartition;
@@ -204,7 +205,12 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 			throw ex;
 		}
 
-		return subpartition.add(bufferConsumer);
+		return subpartition.add(bufferConsumer, insertAsHead);
+	}
+
+	@Override
+	public Collection<Buffer> getInflightBuffers(int subpartitionIndex) {
+		return subpartitions[subpartitionIndex].getInflightBuffers();
 	}
 
 	@Override

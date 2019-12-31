@@ -50,6 +50,7 @@ import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.runtime.util.FatalExitExceptionHandler;
+import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.graph.StreamEdge;
@@ -1417,7 +1418,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					i,
 					environment,
 					environment.getTaskInfo().getTaskName(),
-					chainedConfigs.get(edge.getSourceId()).getBufferTimeout()));
+					chainedConfigs.get(edge.getSourceId()).getBufferTimeout(),
+					configuration.getCheckpointMode()));
 		}
 		return recordWriters;
 	}
@@ -1427,7 +1429,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			int outputIndex,
 			Environment environment,
 			String taskName,
-			long bufferTimeout) {
+			long bufferTimeout,
+			CheckpointingMode checkpointingMode) {
 		@SuppressWarnings("unchecked")
 		StreamPartitioner<OUT> outputPartitioner = (StreamPartitioner<OUT>) edge.getPartitioner();
 
@@ -1447,6 +1450,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			.setChannelSelector(outputPartitioner)
 			.setTimeout(bufferTimeout)
 			.setTaskName(taskName)
+			.setIsUnalignedCheckpoint(checkpointingMode == CheckpointingMode.UNALIGNED)
 			.build(bufferWriter);
 		output.setMetricGroup(environment.getMetricGroup().getIOMetricGroup());
 		return output;

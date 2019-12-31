@@ -60,6 +60,8 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
 import java.util.Random;
@@ -521,8 +523,13 @@ public class RecordWriterTest {
 		}
 
 		@Override
-		public boolean addBufferConsumer(BufferConsumer buffer, int targetChannel) throws IOException {
+		public boolean addBufferConsumer(BufferConsumer buffer, int targetChannel, boolean insertAsHead) throws IOException {
 			return queues[targetChannel].add(buffer);
+		}
+
+		@Override
+		public Collection<Buffer> getInflightBuffers(int subpartitionIndex) {
+			return Collections.emptyList();
 		}
 
 		@Override
@@ -596,9 +603,14 @@ public class RecordWriterTest {
 		}
 
 		@Override
-		public boolean addBufferConsumer(BufferConsumer bufferConsumer, int targetChannel) throws IOException {
+		public boolean addBufferConsumer(BufferConsumer bufferConsumer, int targetChannel, boolean insertAsHead) throws IOException {
 			bufferConsumer.close();
 			return true;
+		}
+
+		@Override
+		public Collection<Buffer> getInflightBuffers(int subpartitionIndex) {
+			return Collections.emptyList();
 		}
 
 		@Override

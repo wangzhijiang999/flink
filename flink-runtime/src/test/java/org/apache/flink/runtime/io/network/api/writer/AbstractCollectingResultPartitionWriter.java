@@ -29,6 +29,8 @@ import javax.annotation.concurrent.ThreadSafe;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.Collection;
+import java.util.Collections;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -70,11 +72,16 @@ public abstract class AbstractCollectingResultPartitionWriter implements ResultP
 	}
 
 	@Override
-	public synchronized boolean addBufferConsumer(BufferConsumer bufferConsumer, int targetChannel) throws IOException {
+	public synchronized boolean addBufferConsumer(BufferConsumer bufferConsumer, int targetChannel, boolean insertAsHead) throws IOException {
 		checkState(targetChannel < getNumberOfSubpartitions());
 		bufferConsumers.add(bufferConsumer);
 		processBufferConsumers();
 		return true;
+	}
+
+	@Override
+	public Collection<Buffer> getInflightBuffers(int subpartitionIndex) {
+		return Collections.emptyList();
 	}
 
 	private void processBufferConsumers() throws IOException {
