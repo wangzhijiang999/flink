@@ -21,8 +21,6 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentProvider;
-import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
-import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.ConnectionID;
@@ -77,6 +75,10 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 	 * is consumed by the receiving task thread.
 	 */
 	private final ArrayDeque<Buffer> receivedBuffers = new ArrayDeque<>();
+
+	/** The collection of buffers need to be spilled for unaligned checkpoint. */
+	@GuardedBy("receivedBuffers")
+	private final ArrayDeque<Buffer> inflightBuffers = new ArrayDeque<>();
 
 	/**
 	 * Flag indicating whether this channel has been released. Either called by the receiving task
@@ -209,6 +211,25 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 		numBytesIn.inc(next.getSize());
 		numBuffersIn.inc();
 		return Optional.of(new BufferAndAvailability(next, moreAvailable, getSenderBacklog()));
+	}
+
+	@Override
+	public Collection<Buffer> getInflightBuffers(long checkpointId) throws IOException {
+		synchronized (receivedBuffers) {
+			inflightBuffers.clear();
+
+			for (Buffer buffer : receivedBuffers) {
+				if (!buffer.isBuffer()) {
+					AbstractEvent event = EventSerializer.fromBuffer(buffer, getClass().getClassLoader());
+					if (event instanceof CheckpointBarrier && ((CheckpointBarrier) event).getId() == checkpointId) {
+						break;
+					}
+					buffer.setReaderIndex(0);
+				}
+				inflightBuffers.add(buffer.retainBuffer());
+			}
+			return inflightBuffers;
+		}
 	}
 
 	// ------------------------------------------------------------------------

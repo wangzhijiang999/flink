@@ -47,6 +47,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -132,6 +133,8 @@ public class SingleInputGate extends InputGate {
 	 * We store this in a map for runtime updates of single channels.
 	 */
 	private final Map<IntermediateResultPartitionID, InputChannel> inputChannels;
+
+	private InputChannel[] channels;
 
 	/** Channels, which notified this input gate about available data. */
 	private final ArrayDeque<InputChannel> inputChannelsWithData = new ArrayDeque<>();
@@ -331,12 +334,16 @@ public class SingleInputGate extends InputGate {
 		}
 	}
 
-	public void setInputChannel(IntermediateResultPartitionID partitionId, InputChannel inputChannel) {
+	public void setInputChannels(InputChannel[] channels) {
 		synchronized (requestLock) {
-			if (inputChannels.put(checkNotNull(partitionId), checkNotNull(inputChannel)) == null
+			this.channels = channels;
+			for (InputChannel inputChannel : channels) {
+				IntermediateResultPartitionID partitionId = inputChannel.getPartitionId().getPartitionId();
+				if (inputChannels.put(partitionId, inputChannel) == null
 					&& inputChannel instanceof UnknownInputChannel) {
 
-				numberOfUninitializedChannels++;
+					numberOfUninitializedChannels++;
+				}
 			}
 		}
 	}
@@ -371,6 +378,7 @@ public class SingleInputGate extends InputGate {
 				LOG.debug("{}: Updated unknown input channel to {}.", owningTaskName, newChannel);
 
 				inputChannels.put(partitionId, newChannel);
+				channels[current.channelIndex] = newChannel;
 
 				if (requestedPartitionsFlag) {
 					newChannel.requestSubpartition(consumedSubpartitionIndex);
@@ -597,6 +605,11 @@ public class SingleInputGate extends InputGate {
 				pendingEvents.add(event);
 			}
 		}
+	}
+
+	@Override
+	public Collection<Buffer> getInflightBuffers(int channelIndex, long checkpointId) throws IOException {
+		return channels[channelIndex].getInflightBuffers(checkpointId);
 	}
 
 	// ------------------------------------------------------------------------

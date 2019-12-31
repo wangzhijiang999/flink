@@ -20,12 +20,14 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferReceivedListener;
 
 import org.apache.flink.shaded.guava18.com.google.common.collect.Maps;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Sets;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -306,5 +308,18 @@ public class UnionInputGate extends InputGate {
 		for (InputGate inputGate : inputGates) {
 			inputGate.registerBufferReceivedListener(listener);
 		}
+	}
+
+	@Override
+	public Collection<Buffer> getInflightBuffers(int channelIndex, long checkpointId) throws IOException {
+		int totalChannels = 0;
+		for (InputGate inputGate : inputGates) {
+			int numberOfChannels = inputGate.getNumberOfInputChannels();
+			if (numberOfChannels + totalChannels > channelIndex) {
+				return inputGate.getInflightBuffers(channelIndex - totalChannels, checkpointId);
+			}
+			totalChannels += numberOfChannels;
+		}
+		throw new IllegalArgumentException("Invalid channel index");
 	}
 }

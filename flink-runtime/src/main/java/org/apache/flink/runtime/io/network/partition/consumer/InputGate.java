@@ -20,9 +20,11 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.PullingAsyncDataInput;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferReceivedListener;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -132,4 +134,6 @@ public abstract class InputGate implements PullingAsyncDataInput<BufferOrEvent>,
 	public abstract void setup() throws IOException, InterruptedException;
 
 	public abstract void registerBufferReceivedListener(BufferReceivedListener listener);
+
+	public abstract Collection<Buffer> getInflightBuffers(int channelIndex, long checkpointId) throws IOException;
 }
