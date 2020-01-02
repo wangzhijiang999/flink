@@ -41,7 +41,7 @@ public abstract class CheckpointBarrierHandler implements BufferReceivedListener
 
 	/** The listener to be notified on complete checkpoints. */
 	@Nullable
-	private final AbstractInvokable toNotifyOnCheckpoint;
+	protected final AbstractInvokable toNotifyOnCheckpoint;
 
 	public CheckpointBarrierHandler(@Nullable AbstractInvokable toNotifyOnCheckpoint) {
 		this.toNotifyOnCheckpoint = toNotifyOnCheckpoint;

@@ -121,6 +121,8 @@ public class InputProcessorUtil {
 					toNotifyOnCheckpoint);
 			case AT_LEAST_ONCE:
 				return new CheckpointBarrierTracker(numberOfInputChannels, toNotifyOnCheckpoint);
+			case UNALIGNED:
+				return new CheckpointBarrierUnaligner(numberOfInputChannels, taskName, toNotifyOnCheckpoint);
 			default:
 				throw new UnsupportedOperationException("Unrecognized Checkpointing Mode: " + checkpointMode);
 		}
@@ -147,6 +149,7 @@ public class InputProcessorUtil {
 					return new BufferSpiller(ioManager, pageSize, maxAlign, taskName);
 				}
 			}
+			case UNALIGNED:
 			case AT_LEAST_ONCE:
 				return new EmptyBufferStorage();
 			default:
