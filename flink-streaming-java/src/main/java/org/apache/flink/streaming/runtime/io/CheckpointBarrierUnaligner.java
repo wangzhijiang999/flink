@@ -24,6 +24,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.io.network.BufferPersister;
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 
 import org.slf4j.Logger;
@@ -158,6 +159,13 @@ public class CheckpointBarrierUnaligner extends CheckpointBarrierHandler {
 		if (isFirstReceivedBarrier) {
 			triggerCheckpoint(barrier);
 		}
+	}
+
+	@Override
+	public void notifyBufferReceived(Buffer buffer, int channelIndex) {
+		// we do not guarantee that the spilled buffers in one channel are close with each other for PoC.
+		// Considering failure recovery future, we should guarantee it.
+		inputPersister.addBuffer(buffer, channelIndex);
 	}
 
 	/**

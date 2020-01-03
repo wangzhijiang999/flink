@@ -116,6 +116,13 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 	@Nonnull
 	private final MemorySegmentProvider memorySegmentProvider;
 
+	/** The latest already triggered checkpoint id which would be updated during {@link #getInflightBuffers(long)}.*/
+	@GuardedBy("receivedBuffers")
+	private long triggeredCheckpointId = -1;
+
+	/** The current received checkpoint id from the network. */
+	private long receivedCheckpointId = -1;
+
 	public RemoteInputChannel(
 		SingleInputGate inputGate,
 		int channelIndex,
@@ -228,6 +235,9 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 				}
 				inflightBuffers.add(buffer.retainBuffer());
 			}
+
+			triggeredCheckpointId = checkpointId;
+
 			return inflightBuffers;
 		}
 	}
@@ -537,6 +547,7 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 
 			final boolean wasEmpty;
 			final CheckpointBarrier checkpointBarrier;
+			Buffer notifyReceivedBuffer = null;
 			synchronized (receivedBuffers) {
 				// Similar to notifyBufferAvailable(), make sure that we never add a buffer
 				// after releaseAllResources() released all buffers from receivedBuffers
@@ -555,6 +566,9 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 				recycleBuffer = false;
 
 				checkpointBarrier = parseCheckpointBarrier(buffer);
+				if (buffer.isBuffer() && receivedCheckpointId < triggeredCheckpointId) {
+					notifyReceivedBuffer = buffer.retainBuffer();
+				}
 			}
 
 			++expectedSequenceNumber;
@@ -567,8 +581,14 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 				onSenderBacklog(backlog);
 			}
 
+			if (checkpointBarrier != null) {
+				receivedCheckpointId = checkpointBarrier.getId();
+			}
 			if (checkpointBarrier != null && inputGate.bufferReceivedListener != null) {
 				inputGate.bufferReceivedListener.notifyBarrierReceived(checkpointBarrier, channelIndex);
+			}
+			if (notifyReceivedBuffer != null && inputGate.bufferReceivedListener != null) {
+				inputGate.bufferReceivedListener.notifyBufferReceived(notifyReceivedBuffer, channelIndex);
 			}
 		} finally {
 			if (recycleBuffer) {
