@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.io.AvailabilityProvider;
 
 import java.io.Closeable;
+import java.io.IOException;
 
 /**
  * Interface for processing records by {@link org.apache.flink.streaming.runtime.tasks.StreamTask}.
@@ -34,4 +35,6 @@ public interface StreamInputProcessor extends AvailabilityProvider, Closeable {
 	 * state and/or {@link #isAvailable()}.
 	 */
 	InputStatus processInput() throws Exception;
+
+	void prepareSnapshot(long checkpointId) throws IOException;
 }

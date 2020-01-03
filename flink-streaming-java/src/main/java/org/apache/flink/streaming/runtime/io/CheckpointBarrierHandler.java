@@ -58,6 +58,17 @@ public abstract class CheckpointBarrierHandler implements BufferReceivedListener
 	public abstract boolean isBlocked(int channelIndex);
 
 	/**
+	 * Checks whether the channel with the given index has been consumed the barrier by task,
+	 * and it is only meaningful for unaligned checkpoint at the moment.
+	 *
+	 * @param channelIndex The channel index to check.
+	 * @return True if the channel has already been consumed the barrier.
+	 */
+	protected boolean isBarrierConsumed(int channelIndex) {
+		return false;
+	}
+
+	/**
 	 * @return true if some blocked data should be unblocked/rolled over.
 	 */
 	public abstract boolean processBarrier(CheckpointBarrier receivedBarrier, int channelIndex, long bufferedBytes) throws Exception;

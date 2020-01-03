@@ -21,6 +21,7 @@ package org.apache.flink.streaming.runtime.io;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.io.network.BufferPersister;
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
@@ -31,6 +32,8 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * {@link CheckpointBarrierUnaligner} is used for triggering checkpoint while reading the first barrier
@@ -66,13 +69,17 @@ public class CheckpointBarrierUnaligner extends CheckpointBarrierHandler {
 	 */
 	private long currentCheckpointId = -1L;
 
+	private final BufferPersister inputPersister;
+
 	CheckpointBarrierUnaligner(
 			int totalNumberOfInputChannels,
 			String taskName,
+			BufferPersister inputPersister,
 			@Nullable AbstractInvokable toNotifyOnCheckpoint) {
 		super(toNotifyOnCheckpoint);
 
 		this.taskName = taskName;
+		this.inputPersister = checkNotNull(inputPersister);
 		this.barrierConsumedChannels = new boolean[totalNumberOfInputChannels];
 	}
 
@@ -89,6 +96,11 @@ public class CheckpointBarrierUnaligner extends CheckpointBarrierHandler {
 	@Override
 	public boolean isBlocked(int channelIndex) {
 		return false;
+	}
+
+	@Override
+	public boolean isBarrierConsumed(int channelIndex) {
+		return barrierConsumedChannels[channelIndex];
 	}
 
 	/**
@@ -161,7 +173,7 @@ public class CheckpointBarrierUnaligner extends CheckpointBarrierHandler {
 
 		if (++numBarriersReceived == barrierConsumedChannels.length) {
 			numBarriersReceived = 0;
-			//TODO we need also notify the input persister of finishing spilling future
+			inputPersister.finish();
 		}
 
 		return currentNumBarrierReceived == 0;

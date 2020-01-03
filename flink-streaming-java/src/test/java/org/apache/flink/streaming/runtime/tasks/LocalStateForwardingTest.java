@@ -57,6 +57,7 @@ import javax.annotation.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.RunnableFuture;
@@ -108,6 +109,7 @@ public class LocalStateForwardingTest extends TestLogger {
 		StreamTask.AsyncCheckpointRunnable checkpointRunnable =
 			new StreamTask.AsyncCheckpointRunnable(
 				testStreamTask,
+				CompletableFuture.completedFuture(null),
 				snapshots,
 				checkpointMetaData,
 				checkpointMetrics,

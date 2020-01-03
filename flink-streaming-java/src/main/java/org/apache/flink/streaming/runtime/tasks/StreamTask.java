@@ -20,10 +20,12 @@ package org.apache.flink.streaming.runtime.tasks;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.accumulators.Accumulator;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.NettyShuffleEnvironmentOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
@@ -34,10 +36,15 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.execution.CancelTaskException;
 import org.apache.flink.runtime.execution.Environment;
+import org.apache.flink.runtime.io.network.BufferPersister;
+import org.apache.flink.runtime.io.network.BufferPersisterImpl;
+import org.apache.flink.runtime.io.network.NoOpBufferPersisterImpl;
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriterBuilder;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
@@ -81,11 +88,14 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -213,6 +223,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 */
 	private long currentCheckpointId = -1;
 
+	protected final BufferPersister inputPersister;
+	protected final BufferPersister outputPersister;
+
 	// ------------------------------------------------------------------------
 
 	/**
@@ -259,6 +272,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		this.recordWriters = createRecordWriters(configuration, environment);
 		this.mailboxProcessor = new MailboxProcessor(this::processInput);
 		this.asyncExceptionHandler = new StreamTaskAsyncExceptionHandler(environment);
+
+		this.inputPersister = createInputPersister();
+		this.outputPersister = createOutputPersister();
 	}
 
 	// ------------------------------------------------------------------------
@@ -846,7 +862,12 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 						checkpointMetaData.getTimestamp(),
 						checkpointOptions);
 
-				// Step (3): Take the state snapshot. This should be largely asynchronous, to not
+				// Step (3): Prepare to spill the inflighting buffers for input and output
+				if (configuration.getCheckpointMode() == CheckpointingMode.UNALIGNED) {
+					prepareInflightDataSnapshot(checkpointId);
+				}
+
+				// Step (4): Take the state snapshot. This should be largely asynchronous, to not
 				//           impact progress of the streaming topology
 				checkpointState(checkpointMetaData, checkpointOptions, checkpointMetrics);
 
@@ -877,6 +898,27 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 				return false;
 			}
+		}
+	}
+
+	private void prepareInflightDataSnapshot(long checkpointId) throws IOException {
+		// For source task we do not have input processor
+		if (inputProcessor != null) {
+			inputProcessor.prepareSnapshot(checkpointId);
+		}
+
+		ResultPartitionWriter[] writers = getEnvironment().getAllWriters();
+		if (writers != null && writers.length > 0) {
+			int indexOffset = 0;
+			for (ResultPartitionWriter writer : writers) {
+				for (int i = 0; i < writer.getNumberOfSubpartitions(); i++) {
+					Collection<Buffer> buffers = writer.getInflightBuffers(i);
+					outputPersister.addBuffers(buffers, i + indexOffset);
+				}
+				indexOffset += writer.getNumberOfSubpartitions();
+			}
+
+			outputPersister.finish();
 		}
 	}
 
@@ -1078,14 +1120,18 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		private final AtomicReference<CheckpointingOperation.AsyncCheckpointState> asyncCheckpointState = new AtomicReference<>(
 			CheckpointingOperation.AsyncCheckpointState.RUNNING);
 
+		private final CompletableFuture<?> bufferPersistingFuture;
+
 		AsyncCheckpointRunnable(
 			StreamTask<?, ?> owner,
+			CompletableFuture<?> bufferPersistingFuture,
 			Map<OperatorID, OperatorSnapshotFutures> operatorSnapshotsInProgress,
 			CheckpointMetaData checkpointMetaData,
 			CheckpointMetrics checkpointMetrics,
 			long asyncStartNanos) {
 
 			this.owner = Preconditions.checkNotNull(owner);
+			this.bufferPersistingFuture = Preconditions.checkNotNull(bufferPersistingFuture);
 			this.operatorSnapshotsInProgress = Preconditions.checkNotNull(operatorSnapshotsInProgress);
 			this.checkpointMetaData = Preconditions.checkNotNull(checkpointMetaData);
 			this.checkpointMetrics = Preconditions.checkNotNull(checkpointMetrics);
@@ -1167,20 +1213,20 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				"Found cached state but no corresponding primary state is reported to the job " +
 					"manager. This indicates a problem.");
 
-			// we signal stateless tasks by reporting null, so that there are no attempts to assign empty state
-			// to stateless tasks on restore. This enables simple job modifications that only concern
-			// stateless without the need to assign them uids to match their (always empty) states.
-			taskStateManager.reportTaskStateSnapshots(
-				checkpointMetaData,
-				checkpointMetrics,
-				hasAckState ? acknowledgedTaskStateSnapshot : null,
-				hasLocalState ? localTaskStateSnapshot : null);
-
 			LOG.debug("{} - finished asynchronous part of checkpoint {}. Asynchronous duration: {} ms",
 				owner.getName(), checkpointMetaData.getCheckpointId(), asyncDurationMillis);
 
 			LOG.trace("{} - reported the following states in snapshot for checkpoint {}: {}.",
 				owner.getName(), checkpointMetaData.getCheckpointId(), acknowledgedTaskStateSnapshot);
+
+			// we signal stateless tasks by reporting null, so that there are no attempts to assign empty state
+			// to stateless tasks on restore. This enables simple job modifications that only concern
+			// stateless without the need to assign them uids to match their (always empty) states.
+			bufferPersistingFuture.thenRun(() -> taskStateManager.reportTaskStateSnapshots(
+				checkpointMetaData,
+				checkpointMetrics,
+				hasAckState ? acknowledgedTaskStateSnapshot : null,
+				hasLocalState ? localTaskStateSnapshot : null));
 		}
 
 		private void handleExecutionException(Exception e) {
@@ -1335,6 +1381,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				// we are transferring ownership over snapshotInProgressList for cleanup to the thread, active on submit
 				AsyncCheckpointRunnable asyncCheckpointRunnable = new AsyncCheckpointRunnable(
 					owner,
+					CompletableFuture.allOf(owner.inputPersister.getCompleteFuture(), owner.outputPersister.getCompleteFuture()),
 					operatorSnapshotsInProgress,
 					checkpointMetaData,
 					checkpointMetrics,
@@ -1454,6 +1501,60 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			.build(bufferWriter);
 		output.setMetricGroup(environment.getMetricGroup().getIOMetricGroup());
 		return output;
+	}
+
+	private BufferPersister createInputPersister() {
+		if (configuration.getCheckpointMode() != CheckpointingMode.UNALIGNED) {
+			return new NoOpBufferPersisterImpl();
+		}
+
+		InputGate[] inputGates = getEnvironment().getAllInputGates();
+		if (inputGates == null) {
+			return new NoOpBufferPersisterImpl();
+		}
+
+		int numInputChannels = 0;
+		for (InputGate inputGate : inputGates) {
+			numInputChannels += inputGate.getNumberOfInputChannels();
+		}
+		if (numInputChannels == 0) {
+			return new NoOpBufferPersisterImpl();
+		} else {
+			return createActiveBufferPersister("_input");
+		}
+	}
+
+	private BufferPersister createOutputPersister() {
+		if (configuration.getCheckpointMode() != CheckpointingMode.UNALIGNED) {
+			return new NoOpBufferPersisterImpl();
+		}
+
+		ResultPartitionWriter[] writers = getEnvironment().getAllWriters();
+		if (writers == null) {
+			return new NoOpBufferPersisterImpl();
+		}
+
+		int numOutputChannels = 0;
+		for (ResultPartitionWriter writer : writers) {
+			numOutputChannels += writer.getNumberOfSubpartitions();
+		}
+		if (numOutputChannels == 0) {
+			return new NoOpBufferPersisterImpl();
+		} else {
+			return createActiveBufferPersister("_output");
+		}
+	}
+
+	private BufferPersister createActiveBufferPersister(String suffixPath) {
+		String persistLocation = getEnvironment().getTaskManagerInfo().getConfiguration().getString(CheckpointingOptions.PERSIST_LOCATION_CONFIG);
+		Path path = new Path(persistLocation, getEnvironment().getExecutionId().toHexString() + suffixPath);
+		BufferPersister bufferPersister = null;
+		try {
+			bufferPersister = new BufferPersisterImpl(path);
+		} catch (IOException e) {
+			ExceptionUtils.rethrow(e);
+		}
+		return bufferPersister;
 	}
 
 	private void handleTimerException(Exception ex) {

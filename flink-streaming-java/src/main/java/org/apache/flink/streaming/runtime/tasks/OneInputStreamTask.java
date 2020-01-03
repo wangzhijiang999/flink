@@ -114,6 +114,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 			this,
 			configuration.getCheckpointMode(),
 			getEnvironment().getIOManager(),
+			inputPersister,
 			inputGate,
 			getEnvironment().getTaskManagerInfo().getConfiguration(),
 			getTaskNameWithSubtaskAndId());
@@ -138,6 +139,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 			inSerializer,
 			getEnvironment().getIOManager(),
 			statusWatermarkValve,
+			inputPersister,
 			0);
 	}
 

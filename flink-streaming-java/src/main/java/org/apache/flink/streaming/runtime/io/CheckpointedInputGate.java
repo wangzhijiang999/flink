@@ -34,6 +34,7 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -176,7 +177,15 @@ public class CheckpointedInputGate implements PullingAsyncDataInput<BufferOrEven
 	}
 
 	public Collection<Buffer> getInflightBuffers(int channelIndex, long checkpointId) throws IOException {
+		if (barrierHandler.isBarrierConsumed(channelIndex)) {
+			return Collections.emptyList();
+		}
+
 		return inputGate.getInflightBuffers(channelIndex, checkpointId);
+	}
+
+	public int getIndexOffset() {
+		return channelIndexOffset;
 	}
 
 	private int offsetChannelIndex(int channelIndex) {

@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
+import org.apache.flink.runtime.io.network.BufferPersister;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.io.PushingAsyncDataInput.DataOutput;
@@ -84,6 +85,7 @@ public final class StreamTwoInputProcessor<IN1, IN2> implements StreamInputProce
 			TypeSerializer<IN2> inputSerializer2,
 			Object lock,
 			IOManager ioManager,
+			BufferPersister inputPersister,
 			StreamStatusMaintainer streamStatusMaintainer,
 			TwoInputStreamOperator<IN1, IN2, ?> streamOperator,
 			TwoInputSelectionHandler inputSelectionHandler,
@@ -115,12 +117,14 @@ public final class StreamTwoInputProcessor<IN1, IN2> implements StreamInputProce
 			inputSerializer1,
 			ioManager,
 			new StatusWatermarkValve(checkpointedInputGates[0].getNumberOfInputChannels(), output1),
+			inputPersister,
 			0);
 		this.input2 = new StreamTaskNetworkInput<>(
 			checkpointedInputGates[1],
 			inputSerializer2,
 			ioManager,
 			new StatusWatermarkValve(checkpointedInputGates[1].getNumberOfInputChannels(), output2),
+			inputPersister,
 			1);
 
 		this.operatorChain = checkNotNull(operatorChain);
@@ -187,6 +191,12 @@ public final class StreamTwoInputProcessor<IN1, IN2> implements StreamInputProce
 		}
 
 		return getInputStatus();
+	}
+
+	@Override
+	public void prepareSnapshot(long checkpointId) throws IOException {
+		input1.prepareSnapshot(checkpointId);
+		input2.prepareSnapshot(checkpointId);
 	}
 
 	private int selectFirstReadingInputIndex() throws IOException {

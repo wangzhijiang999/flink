@@ -21,6 +21,7 @@ package org.apache.flink.streaming.runtime.io;
 import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
+import org.apache.flink.runtime.io.network.NoOpBufferPersisterImpl;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 import org.apache.flink.runtime.io.network.api.serialization.RecordSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSerializer;
@@ -90,6 +91,7 @@ public class StreamTaskNetworkInputTest {
 			LongSerializer.INSTANCE,
 			ioManager,
 			new StatusWatermarkValve(1, output),
+			new NoOpBufferPersisterImpl(),
 			0);
 
 		assertHasNextElement(input, output);
@@ -119,6 +121,7 @@ public class StreamTaskNetworkInputTest {
 				new CheckpointBarrierTracker(1)),
 			inSerializer,
 			new StatusWatermarkValve(1, output),
+			new NoOpBufferPersisterImpl(),
 			0,
 			deserializers);
 

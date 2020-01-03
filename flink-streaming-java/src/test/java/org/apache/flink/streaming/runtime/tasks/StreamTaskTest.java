@@ -1209,6 +1209,10 @@ public class StreamTaskTest extends TestLogger {
 		}
 
 		@Override
+		public void prepareSnapshot(long checkpointId) throws IOException {
+		}
+
+		@Override
 		public void close() throws IOException {
 		}
 

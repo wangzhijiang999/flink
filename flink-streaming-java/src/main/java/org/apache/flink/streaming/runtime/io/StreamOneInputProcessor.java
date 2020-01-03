@@ -78,6 +78,11 @@ public final class StreamOneInputProcessor<IN> implements StreamInputProcessor {
 	}
 
 	@Override
+	public void prepareSnapshot(long checkpointId) throws IOException {
+		input.prepareSnapshot(checkpointId);
+	}
+
+	@Override
 	public void close() throws IOException {
 		input.close();
 	}

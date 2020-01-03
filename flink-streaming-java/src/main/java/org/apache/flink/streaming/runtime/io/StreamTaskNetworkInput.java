@@ -23,6 +23,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
+import org.apache.flink.runtime.io.network.BufferPersister;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 import org.apache.flink.runtime.io.network.api.serialization.RecordDeserializer;
 import org.apache.flink.runtime.io.network.api.serialization.RecordDeserializer.DeserializationResult;
@@ -38,6 +39,7 @@ import org.apache.flink.streaming.runtime.streamstatus.StatusWatermarkValve;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatus;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -68,6 +70,8 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 	/** Valve that controls how watermarks and stream statuses are forwarded. */
 	private final StatusWatermarkValve statusWatermarkValve;
 
+	private final BufferPersister inputPersister;
+
 	private final int inputIndex;
 
 	private int lastChannel = UNSPECIFIED;
@@ -80,6 +84,7 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 			TypeSerializer<?> inputSerializer,
 			IOManager ioManager,
 			StatusWatermarkValve statusWatermarkValve,
+			BufferPersister inputPersister,
 			int inputIndex) {
 		this.checkpointedInputGate = checkpointedInputGate;
 		this.deserializationDelegate = new NonReusingDeserializationDelegate<>(
@@ -93,6 +98,7 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 		}
 
 		this.statusWatermarkValve = checkNotNull(statusWatermarkValve);
+		this.inputPersister = checkNotNull(inputPersister);
 		this.inputIndex = inputIndex;
 	}
 
@@ -101,6 +107,7 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 		CheckpointedInputGate checkpointedInputGate,
 		TypeSerializer<?> inputSerializer,
 		StatusWatermarkValve statusWatermarkValve,
+		BufferPersister inputPersister,
 		int inputIndex,
 		RecordDeserializer<DeserializationDelegate<StreamElement>>[] recordDeserializers) {
 
@@ -109,6 +116,7 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 			new StreamElementSerializer<>(inputSerializer));
 		this.recordDeserializers = recordDeserializers;
 		this.statusWatermarkValve = statusWatermarkValve;
+		this.inputPersister = inputPersister;
 		this.inputIndex = inputIndex;
 	}
 
@@ -195,6 +203,23 @@ public final class StreamTaskNetworkInput<T> implements StreamTaskInput<T> {
 			return AVAILABLE;
 		}
 		return checkpointedInputGate.isAvailable();
+	}
+
+	@Override
+	public void prepareSnapshot(long checkpointId) throws IOException {
+		// Note that if considering recovery in future, we should guarantee that the spilled buffers in one channel
+		// should be close together because one record might span multiple buffers.
+		for (int channelIndex = 0; channelIndex < recordDeserializers.length; channelIndex++) {
+			final int globalIndex = channelIndex + checkpointedInputGate.getIndexOffset();
+
+			Optional<Buffer> unconsumedBuffer = recordDeserializers[channelIndex].getUnconsumedBuffer();
+			if (unconsumedBuffer.isPresent()) {
+				inputPersister.addBuffer(unconsumedBuffer.get(), globalIndex);
+			}
+
+			Collection<Buffer> buffers = checkpointedInputGate.getInflightBuffers(channelIndex, checkpointId);
+			inputPersister.addBuffers(buffers, globalIndex);
+		}
 	}
 
 	@Override

@@ -23,6 +23,7 @@ import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.NettyShuffleEnvironmentOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
+import org.apache.flink.runtime.io.network.BufferPersister;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.util.ConfigurationParserUtils;
@@ -43,6 +44,7 @@ public class InputProcessorUtil {
 			AbstractInvokable toNotifyOnCheckpoint,
 			CheckpointingMode checkpointMode,
 			IOManager ioManager,
+			BufferPersister inputPersister,
 			InputGate inputGate,
 			Configuration taskManagerConfig,
 			String taskName) throws IOException {
@@ -52,7 +54,7 @@ public class InputProcessorUtil {
 		BufferStorage bufferStorage = createBufferStorage(
 			checkpointMode, ioManager, pageSize, taskManagerConfig, taskName);
 		CheckpointBarrierHandler barrierHandler = createCheckpointBarrierHandler(
-			checkpointMode, inputGate.getNumberOfInputChannels(), taskName, toNotifyOnCheckpoint);
+			checkpointMode, inputGate.getNumberOfInputChannels(), taskName, inputPersister, toNotifyOnCheckpoint);
 
 		if (checkpointMode == CheckpointingMode.UNALIGNED) {
 			inputGate.registerBufferReceivedListener(barrierHandler);
@@ -69,6 +71,7 @@ public class InputProcessorUtil {
 			AbstractInvokable toNotifyOnCheckpoint,
 			CheckpointingMode checkpointMode,
 			IOManager ioManager,
+			BufferPersister inputPersister,
 			InputGate inputGate1,
 			InputGate inputGate2,
 			Configuration taskManagerConfig,
@@ -95,6 +98,7 @@ public class InputProcessorUtil {
 			checkpointMode,
 			inputGate1.getNumberOfInputChannels() + inputGate2.getNumberOfInputChannels(),
 			taskName,
+			inputPersister,
 			toNotifyOnCheckpoint);
 
 		if (checkpointMode == CheckpointingMode.UNALIGNED) {
@@ -112,6 +116,7 @@ public class InputProcessorUtil {
 			CheckpointingMode checkpointMode,
 			int numberOfInputChannels,
 			String taskName,
+			BufferPersister inputPersister,
 			AbstractInvokable toNotifyOnCheckpoint) {
 		switch (checkpointMode) {
 			case EXACTLY_ONCE:
@@ -122,7 +127,7 @@ public class InputProcessorUtil {
 			case AT_LEAST_ONCE:
 				return new CheckpointBarrierTracker(numberOfInputChannels, toNotifyOnCheckpoint);
 			case UNALIGNED:
-				return new CheckpointBarrierUnaligner(numberOfInputChannels, taskName, toNotifyOnCheckpoint);
+				return new CheckpointBarrierUnaligner(numberOfInputChannels, taskName, inputPersister, toNotifyOnCheckpoint);
 			default:
 				throw new UnsupportedOperationException("Unrecognized Checkpointing Mode: " + checkpointMode);
 		}

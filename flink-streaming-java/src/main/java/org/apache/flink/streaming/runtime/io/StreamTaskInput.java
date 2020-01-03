@@ -20,6 +20,7 @@ package org.apache.flink.streaming.runtime.io;
 import org.apache.flink.annotation.Internal;
 
 import java.io.Closeable;
+import java.io.IOException;
 
 /**
  * Basic interface for inputs of stream operators.
@@ -32,4 +33,9 @@ public interface StreamTaskInput<T> extends PushingAsyncDataInput<T>, Closeable 
 	 * Returns the input index of this input.
 	 */
 	int getInputIndex();
+
+	/**
+	 * Prepares to spill the in-flight input buffers as checkpoint snapshot.
+	 */
+	void prepareSnapshot(long checkpointId) throws IOException;
 }
