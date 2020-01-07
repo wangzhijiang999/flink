@@ -53,6 +53,11 @@ public class InputProcessorUtil {
 			checkpointMode, ioManager, pageSize, taskManagerConfig, taskName);
 		CheckpointBarrierHandler barrierHandler = createCheckpointBarrierHandler(
 			checkpointMode, inputGate.getNumberOfInputChannels(), taskName, toNotifyOnCheckpoint);
+
+		if (checkpointMode == CheckpointingMode.UNALIGNED) {
+			inputGate.registerBufferReceivedListener(barrierHandler);
+		}
+
 		return new CheckpointedInputGate(inputGate, bufferStorage, barrierHandler);
 	}
 
@@ -91,6 +96,12 @@ public class InputProcessorUtil {
 			inputGate1.getNumberOfInputChannels() + inputGate2.getNumberOfInputChannels(),
 			taskName,
 			toNotifyOnCheckpoint);
+
+		if (checkpointMode == CheckpointingMode.UNALIGNED) {
+			inputGate1.registerBufferReceivedListener(barrierHandler);
+			inputGate2.registerBufferReceivedListener(barrierHandler);
+		}
+
 		return new CheckpointedInputGate[] {
 			new CheckpointedInputGate(inputGate1, linkedBufferStorage1, barrierHandler),
 			new CheckpointedInputGate(inputGate2, linkedBufferStorage2, barrierHandler, inputGate1.getNumberOfInputChannels())

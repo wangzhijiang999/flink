@@ -27,6 +27,7 @@ import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
+import org.apache.flink.runtime.io.network.buffer.BufferReceivedListener;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
@@ -39,6 +40,8 @@ import org.apache.flink.util.function.SupplierWithException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -168,6 +171,9 @@ public class SingleInputGate extends InputGate {
 
 	private final CompletableFuture<Void> closeFuture;
 
+	@Nullable
+	protected BufferReceivedListener bufferReceivedListener;
+
 	public SingleInputGate(
 		String owningTaskName,
 		IntermediateDataSetID consumedResultId,
@@ -240,6 +246,11 @@ public class SingleInputGate extends InputGate {
 
 			requestedPartitionsFlag = true;
 		}
+	}
+
+	@Override
+	public void registerBufferReceivedListener(BufferReceivedListener bufferReceivedListener) {
+		this.bufferReceivedListener = checkNotNull(bufferReceivedListener);
 	}
 
 	// ------------------------------------------------------------------------

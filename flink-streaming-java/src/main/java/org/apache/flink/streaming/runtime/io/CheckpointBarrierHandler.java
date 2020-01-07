@@ -24,6 +24,8 @@ import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
+import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.BufferReceivedListener;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 
 import javax.annotation.Nullable;
@@ -35,7 +37,7 @@ import java.io.IOException;
  * Different implementations may either simply track barriers, or block certain inputs on
  * barriers.
  */
-public abstract class CheckpointBarrierHandler {
+public abstract class CheckpointBarrierHandler implements BufferReceivedListener {
 
 	/** The listener to be notified on complete checkpoints. */
 	@Nullable
@@ -101,5 +103,11 @@ public abstract class CheckpointBarrierHandler {
 		if (toNotifyOnCheckpoint != null) {
 			toNotifyOnCheckpoint.abortCheckpointOnBarrier(checkpointId, cause);
 		}
+	}
+
+	public void notifyBufferReceived(Buffer buffer, int channelInde) throws IOException {
+	}
+
+	public void notifyBarrierReceived(CheckpointBarrier barrier, int channelIndex) throws IOException {
 	}
 }
