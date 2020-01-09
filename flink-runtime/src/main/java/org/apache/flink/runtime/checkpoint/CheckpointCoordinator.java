@@ -188,6 +188,8 @@ public class CheckpointCoordinator {
 
 	private final CheckpointFailureManager failureManager;
 
+	private final boolean isUnaligned;
+
 	// --------------------------------------------------------------------------------------------
 
 	public CheckpointCoordinator(
@@ -263,6 +265,8 @@ public class CheckpointCoordinator {
 		} catch (Throwable t) {
 			throw new RuntimeException("Failed to start checkpoint ID counter: " + t.getMessage(), t);
 		}
+
+		this.isUnaligned = chkConfig.isUnaligned();
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -443,6 +447,12 @@ public class CheckpointCoordinator {
 	 */
 	public boolean triggerCheckpoint(long timestamp, boolean isPeriodic) {
 		try {
+			synchronized (lock) {
+				// The limitation for unaligned checkpoint is only supporting one checkpoint in progress atm.
+				if (isUnaligned && pendingCheckpoints.size() > 0) {
+					return false;
+				}
+			}
 			triggerCheckpoint(timestamp, checkpointProperties, null, isPeriodic, false);
 			return true;
 		} catch (CheckpointException e) {

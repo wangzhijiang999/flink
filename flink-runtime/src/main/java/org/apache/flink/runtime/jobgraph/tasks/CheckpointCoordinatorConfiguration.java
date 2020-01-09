@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.jobgraph.tasks;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.checkpoint.CheckpointCoordinator;
 import org.apache.flink.runtime.checkpoint.CheckpointRetentionPolicy;
 import org.apache.flink.util.Preconditions;
@@ -60,6 +61,9 @@ public class CheckpointCoordinatorConfiguration implements Serializable {
 
 	private final boolean isPreferCheckpointForRecovery;
 
+	private final boolean isUnaligned;
+
+	@VisibleForTesting
 	public CheckpointCoordinatorConfiguration(
 			long checkpointInterval,
 			long checkpointTimeout,
@@ -69,6 +73,29 @@ public class CheckpointCoordinatorConfiguration implements Serializable {
 			boolean isExactlyOnce,
 			boolean isPreferCheckpointForRecovery,
 			int tolerableCpFailureNumber) {
+
+		this (
+			checkpointInterval,
+			checkpointTimeout,
+			minPauseBetweenCheckpoints,
+			maxConcurrentCheckpoints,
+			checkpointRetentionPolicy,
+			isExactlyOnce,
+			isPreferCheckpointForRecovery,
+			tolerableCpFailureNumber,
+			false);
+	}
+
+	public CheckpointCoordinatorConfiguration(
+			long checkpointInterval,
+			long checkpointTimeout,
+			long minPauseBetweenCheckpoints,
+			int maxConcurrentCheckpoints,
+			CheckpointRetentionPolicy checkpointRetentionPolicy,
+			boolean isExactlyOnce,
+			boolean isPreferCheckpointForRecovery,
+			int tolerableCpFailureNumber,
+			boolean isUnaligned) {
 
 		// sanity checks
 		if (checkpointInterval < MINIMAL_CHECKPOINT_TIME || checkpointTimeout < MINIMAL_CHECKPOINT_TIME ||
@@ -85,6 +112,7 @@ public class CheckpointCoordinatorConfiguration implements Serializable {
 		this.isExactlyOnce = isExactlyOnce;
 		this.isPreferCheckpointForRecovery = isPreferCheckpointForRecovery;
 		this.tolerableCheckpointFailureNumber = tolerableCpFailureNumber;
+		this.isUnaligned = isUnaligned;
 	}
 
 	public long getCheckpointInterval() {
@@ -119,6 +147,10 @@ public class CheckpointCoordinatorConfiguration implements Serializable {
 		return tolerableCheckpointFailureNumber;
 	}
 
+	public boolean isUnaligned() {
+		return isUnaligned;
+	}
+
 	@Override
 	public boolean equals(Object o) {
 		if (this == o) {
@@ -135,6 +167,7 @@ public class CheckpointCoordinatorConfiguration implements Serializable {
 			isExactlyOnce == that.isExactlyOnce &&
 			checkpointRetentionPolicy == that.checkpointRetentionPolicy &&
 			isPreferCheckpointForRecovery == that.isPreferCheckpointForRecovery &&
+			isUnaligned == that.isUnaligned &&
 			tolerableCheckpointFailureNumber == that.tolerableCheckpointFailureNumber;
 	}
 
@@ -148,6 +181,7 @@ public class CheckpointCoordinatorConfiguration implements Serializable {
 				checkpointRetentionPolicy,
 				isExactlyOnce,
 				isPreferCheckpointForRecovery,
+				isUnaligned,
 				tolerableCheckpointFailureNumber);
 	}
 
@@ -159,6 +193,7 @@ public class CheckpointCoordinatorConfiguration implements Serializable {
 			", minPauseBetweenCheckpoints=" + minPauseBetweenCheckpoints +
 			", maxConcurrentCheckpoints=" + maxConcurrentCheckpoints +
 			", checkpointRetentionPolicy=" + checkpointRetentionPolicy +
+			", isUnaligned=" + isUnaligned +
 			", tolerableCheckpointFailureNumber=" + tolerableCheckpointFailureNumber +
 			'}';
 	}
