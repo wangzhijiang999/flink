@@ -100,7 +100,7 @@ public class LocalFileSystem extends FileSystem {
 	@Override
 	public BlockLocation[] getFileBlockLocations(FileStatus file, long start, long len) throws IOException {
 		return new BlockLocation[] {
-				new LocalBlockLocation(hostName, file.getLen())
+			new LocalBlockLocation(hostName, file.getLen())
 		};
 	}
 
@@ -112,7 +112,7 @@ public class LocalFileSystem extends FileSystem {
 		}
 		else {
 			throw new FileNotFoundException("File " + f + " does not exist or the user running "
-					+ "Flink ('" + System.getProperty("user.name") + "') has insufficient permissions to access it.");
+				+ "Flink ('" + System.getProperty("user.name") + "') has insufficient permissions to access it.");
 		}
 	}
 
@@ -236,22 +236,27 @@ public class LocalFileSystem extends FileSystem {
 	@Override
 	public boolean mkdirs(final Path f) throws IOException {
 		checkNotNull(f, "path is null");
-		return mkdirsInternal(pathToFile(f));
+		File file = pathToFile(f);
+		LOG.error("create parent path file {}", file.getAbsolutePath());
+		return mkdirsInternal(file);
 	}
 
 	private boolean mkdirsInternal(File file) throws IOException {
 		if (file.isDirectory()) {
-				return true;
+			LOG.error("file is directory {}", file.getAbsolutePath());
+			return true;
 		}
 		else if (file.exists() && !file.isDirectory()) {
 			// Important: The 'exists()' check above must come before the 'isDirectory()' check to
 			//            be safe when multiple parallel instances try to create the directory
 
 			// exists and is not a directory -> is a regular file
+			LOG.error("file already exists exception");
 			throw new FileAlreadyExistsException(file.getAbsolutePath());
 		}
 		else {
 			File parent = file.getParentFile();
+			LOG.error("return parent file {}", parent);
 			return (parent == null || mkdirsInternal(parent)) && (file.mkdir() || file.isDirectory());
 		}
 	}
@@ -265,11 +270,19 @@ public class LocalFileSystem extends FileSystem {
 		}
 
 		final Path parent = filePath.getParent();
-		if (parent != null && !mkdirs(parent)) {
-			throw new IOException("Mkdirs failed to create " + parent);
-		}
+		LOG.error("parent path {} and file path {}", parent, filePath);
 
 		final File file = pathToFile(filePath);
+		LOG.error("file path {}", file.getAbsolutePath());
+
+		if (parent != null && !mkdirs(parent)) {
+			LOG.error("throw exception");
+			try {
+				Thread.sleep(1000000);
+			} catch (Exception ignore) {
+			}
+			throw new IOException("Mkdirs failed to create " + parent);
+		}
 		return new LocalDataOutputStream(file);
 	}
 
@@ -308,9 +321,14 @@ public class LocalFileSystem extends FileSystem {
 
 	/**
 	 * Converts the given Path to a File for this file system.
+	 *
+	 * <p>If the path is not absolute, it is interpreted relative to this FileSystem's working directory.
 	 */
 	public File pathToFile(Path path) {
-		return new File(path.getPath());
+		if (!path.isAbsolute()) {
+			path = new Path(getWorkingDirectory(), path);
+		}
+		return new File(path.toUri().getPath());
 	}
 
 	// ------------------------------------------------------------------------
