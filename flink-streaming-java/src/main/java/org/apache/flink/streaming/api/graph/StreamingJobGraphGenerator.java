@@ -322,7 +322,7 @@ public class StreamingJobGraphGenerator {
 				config.setOutEdges(streamGraph.getStreamNode(currentNodeId).getOutEdges());
 
 				for (StreamEdge edge : transitiveOutEdges) {
-					connect(startNodeId, edge);
+					connect(startNodeId, edge, config);
 				}
 
 				config.setTransitiveChainedTaskConfigs(chainedConfigs.get(startNodeId));
@@ -469,7 +469,9 @@ public class StreamingJobGraphGenerator {
 		StreamNode vertex = streamGraph.getStreamNode(vertexID);
 
 		config.setVertexID(vertexID);
-		config.setBufferTimeout(vertex.getBufferTimeout());
+		if (vertex.getBufferTimeout() >= 0) {
+			config.setBufferTimeout(vertex.getBufferTimeout());
+		}
 
 		config.setTypeSerializersIn(vertex.getTypeSerializersIn());
 		config.setTypeSerializerOut(vertex.getTypeSerializerOut());
@@ -539,7 +541,7 @@ public class StreamingJobGraphGenerator {
 		}
 	}
 
-	private void connect(Integer headOfChain, StreamEdge edge) {
+	private void connect(Integer headOfChain, StreamEdge edge, StreamConfig config) {
 
 		physicalEdgesInOrder.add(edge);
 
@@ -570,6 +572,8 @@ public class StreamingJobGraphGenerator {
 					edge.getShuffleMode() + " is not supported yet.");
 		}
 
+		checkCompatible(resultPartitionType, streamGraph.getStreamNode(edge.getSourceId()).getBufferTimeout());
+
 		JobEdge jobEdge;
 		if (isPointwisePartitioner(partitioner)) {
 			jobEdge = downStreamVertex.connectNewDataSetAsInput(
@@ -588,6 +592,13 @@ public class StreamingJobGraphGenerator {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("CONNECTED: {} - {} -> {}", partitioner.getClass().getSimpleName(),
 					headOfChain, downStreamVertexID);
+		}
+	}
+
+	private void checkCompatible(ResultPartitionType type, long bufferTimeout) {
+		if (type.isBlocking() && bufferTimeout != -1) {
+			throw new UnsupportedOperationException("Blocking partition does not support buffer timeout at the" +
+				" moment. Please either reset buffer timeout as -1 or use the non-blocking partition.");
 		}
 	}
 

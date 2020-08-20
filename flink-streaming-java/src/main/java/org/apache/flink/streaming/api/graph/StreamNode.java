@@ -61,7 +61,7 @@ public class StreamNode implements Serializable {
 	private ResourceSpec minResources = ResourceSpec.DEFAULT;
 	private ResourceSpec preferredResources = ResourceSpec.DEFAULT;
 	private int managedMemoryWeight = Transformation.DEFAULT_MANAGED_MEMORY_WEIGHT;
-	private long bufferTimeout;
+	private long bufferTimeout = -1;
 	private final String operatorName;
 	private @Nullable String slotSharingGroup;
 	private @Nullable String coLocationGroup;

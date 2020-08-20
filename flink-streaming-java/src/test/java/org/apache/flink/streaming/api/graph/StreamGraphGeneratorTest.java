@@ -121,7 +121,7 @@ public class StreamGraphGeneratorTest extends TestLogger {
 			switch (node.getOperatorName()) {
 
 				case "A":
-					assertEquals(77L, node.getBufferTimeout());
+					assertEquals(-1L, node.getBufferTimeout());
 					break;
 				case "B":
 					assertEquals(0L, node.getBufferTimeout());
@@ -130,7 +130,7 @@ public class StreamGraphGeneratorTest extends TestLogger {
 					assertEquals(12L, node.getBufferTimeout());
 					break;
 				case "D":
-					assertEquals(77L, node.getBufferTimeout());
+					assertEquals(-1L, node.getBufferTimeout());
 					break;
 				default:
 					assertTrue(node.getOperator() instanceof StreamSource);

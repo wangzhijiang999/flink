@@ -287,8 +287,6 @@ public class StreamGraphGenerator {
 
 		if (transform.getBufferTimeout() >= 0) {
 			streamGraph.setBufferTimeout(transform.getId(), transform.getBufferTimeout());
-		} else {
-			streamGraph.setBufferTimeout(transform.getId(), defaultBufferTimeout);
 		}
 
 		if (transform.getUid() != null) {

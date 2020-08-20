@@ -609,6 +609,33 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 			sourceAndMapVertex.getProducedDataSets().get(0).getResultType());
 	}
 
+	@Test(expected = UnsupportedOperationException.class)
+	public void testConflictShuffleModeWithBufferTimeout() {
+		testCompatibleShuffleModeWithBufferTimeout(ShuffleMode.BATCH);
+	}
+
+	@Test
+	public void testNormalShuffleModeWithBufferTimeout() {
+		testCompatibleShuffleModeWithBufferTimeout(ShuffleMode.PIPELINED);
+	}
+
+	private void testCompatibleShuffleModeWithBufferTimeout(ShuffleMode shuffleMode) {
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		DataStream<Integer> sourceDataStream = env.fromElements(1, 2, 3);
+		sourceDataStream.getTransformation().setBufferTimeout(100);
+
+		PartitionTransformation<Integer> transformation = new PartitionTransformation<>(
+			sourceDataStream.getTransformation(),
+			new RebalancePartitioner<>(),
+			shuffleMode);
+
+		DataStream<Integer> partitionStream = new DataStream<>(env, transformation);
+		partitionStream.map(value -> value).print();
+
+		StreamingJobGraphGenerator.createJobGraph(env.getStreamGraph());
+	}
+
 	/**
 	 * Test iteration job, check slot sharing group and co-location group.
 	 */
