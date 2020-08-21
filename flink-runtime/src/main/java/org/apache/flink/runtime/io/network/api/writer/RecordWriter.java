@@ -31,6 +31,7 @@ import org.apache.flink.runtime.io.network.api.serialization.RecordSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSerializer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
+import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.util.XORShiftRandom;
 
@@ -102,6 +103,11 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 
 		checkArgument(timeout >= -1);
 		this.flushAlways = (timeout == 0);
+		if (targetPartition.getSubpartition(0) instanceof PipelinedSubpartition) {
+			if (timeout != 100) {
+				timeout = 100;
+			}
+		}
 		if (timeout == -1 || timeout == 0) {
 			outputFlusher = null;
 		} else {
