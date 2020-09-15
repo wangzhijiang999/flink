@@ -26,6 +26,9 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.shaded.netty4.io.netty.channel.DefaultFileRegion;
+import org.apache.flink.shaded.netty4.io.netty.channel.FileRegion;
+import org.apache.flink.shaded.netty4.io.netty.util.IllegalReferenceCountException;
 import org.apache.flink.util.ExceptionUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
@@ -41,11 +44,14 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.LengthFieldBasedFra
 
 import javax.annotation.Nullable;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -369,6 +375,166 @@ public abstract class NettyMessage {
 				ExceptionUtils.rethrowIOException(t);
 				return null; // silence the compiler
 			}
+		}
+
+		/**
+		 * Parses the message header part and composes a new BufferResponse with an empty data buffer. The
+		 * data buffer will be filled in later.
+		 *
+		 * @param messageHeader the serialized message header.
+		 * @param bufferAllocator the allocator for network buffer.
+		 * @return a BufferResponse object with the header parsed and the data buffer to fill in later. The
+		 *			data buffer will be null if the target channel has been released or the buffer size is 0.
+		 */
+		static BufferResponse readFrom(ByteBuf messageHeader, NetworkBufferAllocator bufferAllocator) {
+			InputChannelID receiverId = InputChannelID.fromByteBuf(messageHeader);
+			int sequenceNumber = messageHeader.readInt();
+			int backlog = messageHeader.readInt();
+			Buffer.DataType dataType = Buffer.DataType.values()[messageHeader.readByte()];
+			boolean isCompressed = messageHeader.readBoolean();
+			int size = messageHeader.readInt();
+
+			Buffer dataBuffer = null;
+
+			if (size != 0) {
+				if (dataType.isBuffer()) {
+					dataBuffer = bufferAllocator.allocatePooledNetworkBuffer(receiverId);
+				} else {
+					dataBuffer = bufferAllocator.allocateUnPooledNetworkBuffer(size, dataType);
+				}
+			}
+
+			if (dataBuffer != null) {
+				dataBuffer.setCompressed(isCompressed);
+			}
+
+			return new BufferResponse(
+				dataBuffer,
+				dataType,
+				isCompressed,
+				sequenceNumber,
+				receiverId,
+				backlog,
+				size);
+		}
+	}
+
+	static class BatchFileRegion extends DefaultFileRegion {
+
+		static final byte ID = 0;
+
+		// receiver ID (16), sequence number (4), backlog (4), dataType (1), isCompressed (1), buffer size (4)
+		static final int MESSAGE_HEADER_LENGTH = 16 + 4 + 4 + 1 + 1 + 4;
+
+		private FileChannel file;
+
+		final InputChannelID receiverId;
+
+		final int sequenceNumber;
+
+		final int backlog;
+
+		final Buffer.DataType dataType;
+
+		final boolean isCompressed;
+
+		final int bufferSize;
+
+		final int position;
+
+		private BatchFileRegion(
+			@Nullable FileChannel file,
+			Buffer.DataType dataType,
+			boolean isCompressed,
+			int sequenceNumber,
+			InputChannelID receiverId,
+			int backlog,
+			int position,
+			int bufferSize) {
+
+			this.file = file;
+			this.dataType = dataType;
+			this.isCompressed = isCompressed;
+			this.sequenceNumber = sequenceNumber;
+			this.receiverId = checkNotNull(receiverId);
+			this.backlog = backlog;
+			this.position = position;
+			this.bufferSize = bufferSize;
+		}
+
+		BatchFileRegion(
+			FileChannel file,
+			int sequenceNumber,
+			InputChannelID receiverId,
+			int backlog) {
+
+			this.file = checkNotNull(file);
+			checkArgument(buffer.getDataType().ordinal() <= Byte.MAX_VALUE, "Too many data types defined!");
+			this.dataType = buffer.getDataType();
+			this.isCompressed = buffer.isCompressed();
+			this.sequenceNumber = sequenceNumber;
+			this.receiverId = checkNotNull(receiverId);
+			this.backlog = backlog;
+			this.bufferSize = buffer.getSize();
+		}
+
+		boolean isBuffer() {
+			return dataType.isBuffer();
+		}
+
+		// --------------------------------------------------------------------
+		// Serialization
+		// --------------------------------------------------------------------
+
+		@Override
+		ByteBuf write(ByteBufAllocator allocator) throws IOException {
+			ByteBuf headerBuf = null;
+			try {
+				// in order to forward the buffer to netty, it needs an allocator set
+				buffer.setAllocator(allocator);
+
+				// only allocate header buffer - we will combine it with the data buffer below
+				headerBuf = allocateBuffer(allocator, ID, MESSAGE_HEADER_LENGTH, bufferSize, false);
+
+				receiverId.writeTo(headerBuf);
+				headerBuf.writeInt(sequenceNumber);
+				headerBuf.writeInt(backlog);
+				headerBuf.writeByte(dataType.ordinal());
+				headerBuf.writeBoolean(isCompressed);
+				headerBuf.writeInt(buffer.readableBytes());
+
+				CompositeByteBuf composityBuf = allocator.compositeDirectBuffer();
+				composityBuf.addComponent(headerBuf);
+				composityBuf.addComponent(buffer.asByteBuf());
+				// update writer index since we have data written to the components:
+				composityBuf.writerIndex(headerBuf.writerIndex() + buffer.asByteBuf().writerIndex());
+				return composityBuf;
+			}
+			catch (Throwable t) {
+				if (headerBuf != null) {
+					headerBuf.release();
+				}
+				buffer.recycleBuffer();
+
+				ExceptionUtils.rethrowIOException(t);
+				return null; // silence the compiler
+			}
+		}
+
+		@Override
+		public long transferTo(WritableByteChannel target, long position) throws IOException {
+			ByteBuf headerBuf = allocateBuffer(ctx.alloc(), ID, MESSAGE_HEADER_LENGTH, bufferSize, false);
+
+			receiverId.writeTo(headerBuf);
+			headerBuf.writeInt(sequenceNumber);
+			headerBuf.writeInt(backlog);
+			headerBuf.writeByte(dataType.ordinal());
+			headerBuf.writeBoolean(isCompressed);
+			headerBuf.writeInt(bufferSize);
+
+			target.write(headerBuf.nioBuffer());
+			long written = file.transferTo(position, bufferSize, target);
+			return written;
 		}
 
 		/**
