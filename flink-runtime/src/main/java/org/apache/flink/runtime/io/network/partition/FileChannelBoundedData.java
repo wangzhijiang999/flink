@@ -145,21 +145,10 @@ final class FileChannelBoundedData implements BoundedData {
 			}
 			headerBuffer.flip();
 
-			final boolean isCompressed;
-			final int size;
-			final Buffer.DataType dataType;
-			try {
-				boolean isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
-				isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
-				size = headerBuffer.getInt();
-				dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
-			}
-			catch (BufferUnderflowException | IllegalArgumentException e) {
-				// buffer underflow if header buffer is undersized
-				// IllegalArgumentException if size is outside memory segment size
-				throwCorruptDataException();
-				return null; // silence compiler
-			}
+			boolean isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
+			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
+			int size = headerBuffer.getInt();
+			Buffer.DataType dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
 
 			boolean isAvailable = (position + bufferSize) < fileSize;
 			return new ResultSubpartitionView.FileRawMessage(
