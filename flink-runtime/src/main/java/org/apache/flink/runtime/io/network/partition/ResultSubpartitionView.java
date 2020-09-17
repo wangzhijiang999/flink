@@ -61,6 +61,7 @@ public interface ResultSubpartitionView {
 
 	int unsynchronizedGetNumberOfQueuedBuffers();
 
+	int getDataBufferBacklog();
 
 	abstract class RawMessage {
 		private final boolean isDataAvailable;

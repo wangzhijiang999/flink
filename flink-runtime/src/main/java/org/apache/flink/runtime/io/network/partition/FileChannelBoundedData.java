@@ -116,7 +116,7 @@ final class FileChannelBoundedData implements BoundedData {
 
 		private final int bufferSize;
 
-		private final long channelSize;
+		private final long fileSize;
 
 		private long position;
 
@@ -125,7 +125,7 @@ final class FileChannelBoundedData implements BoundedData {
 
 		FileBufferReader(FileChannel fileChannel, int bufferSize, ResultSubpartitionView subpartitionView) throws IOException {
 			this.fileChannel = checkNotNull(fileChannel);
-			this.channelSize = fileChannel.size();
+			this.fileSize = fileChannel.size();
 			this.bufferSize = bufferSize;
 			this.headerBuffer = BufferReaderWriterUtil.allocatedHeaderBuffer();
 			this.subpartitionView = checkNotNull(subpartitionView);
@@ -134,7 +134,7 @@ final class FileChannelBoundedData implements BoundedData {
 		@Nullable
 		@Override
 		public ResultSubpartitionView.RawMessage nextMessage() throws IOException {
-			if (position >= channelSize) {
+			if (position >= fileSize) {
 				isFinished = true;
 				return null;
 			}
@@ -145,14 +145,14 @@ final class FileChannelBoundedData implements BoundedData {
 			}
 			headerBuffer.flip();
 
-			final boolean isEvent;
 			final boolean isCompressed;
 			final int size;
-
+			final Buffer.DataType dataType;
 			try {
-				isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
+				boolean isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
 				isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
 				size = headerBuffer.getInt();
+				dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
 			}
 			catch (BufferUnderflowException | IllegalArgumentException e) {
 				// buffer underflow if header buffer is undersized
@@ -161,9 +161,16 @@ final class FileChannelBoundedData implements BoundedData {
 				return null; // silence compiler
 			}
 
-			BufferReaderWriterUtil.readFromByteChannel(fileChannel, headerBuffer, this);
-			boolean isAvailable = (position + bufferSize) < channelSize;
-			return new ResultSubpartitionView.FileRawMessage(fileChannel, position, isAvailable, isAvailable, 1);
+			boolean isAvailable = (position + bufferSize) < fileSize;
+			return new ResultSubpartitionView.FileRawMessage(
+				fileChannel,
+				position,
+				isAvailable,
+				isAvailable,
+				dataType,
+				isCompressed,
+				subpartitionView.getDataBufferBacklog(),
+				size);
 		}
 
 		@Override

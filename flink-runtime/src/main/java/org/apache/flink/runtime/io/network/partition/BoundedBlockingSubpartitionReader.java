@@ -109,7 +109,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 			assert dataReader != null;
 
 			try {
-				nextBuffer = dataReader.nextBuffer();
+				nextBuffer = dataReader.nextMessage();
 			} catch (IOException ex) {
 				// this exception wrapper is only for avoiding throwing IOException explicitly
 				// in relevant interface methods
@@ -168,6 +168,11 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 	@Override
 	public int unsynchronizedGetNumberOfQueuedBuffers() {
 		return parent.unsynchronizedGetNumberOfQueuedBuffers();
+	}
+
+	@Override
+	public int getDataBufferBacklog() {
+		return this.dataBufferBacklog;
 	}
 
 	@Override
