@@ -23,9 +23,7 @@ import org.apache.flink.runtime.io.network.NetworkSequenceViewReader;
 import org.apache.flink.runtime.io.network.partition.BufferAvailabilityListener;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
-import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.BufferAndAvailability;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 
@@ -123,26 +121,6 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 		return subpartitionView.isAvailable(numCreditsAvailable);
 	}
 
-	/**
-	 * Check whether this reader is available or not (internal use, in sync with
-	 * {@link #isAvailable()}, but slightly faster).
-	 *
-	 * <p>Returns true only if the next buffer is an event or the reader has both available
-	 * credits and buffers.
-	 *
-	 * @param bufferAndBacklog
-	 * 		current buffer and backlog including information about the next buffer
-	 */
-	private boolean isAvailable(BufferAndBacklog bufferAndBacklog) {
-		// BEWARE: this must be in sync with #isAvailable()!
-		if (numCreditsAvailable > 0) {
-			return bufferAndBacklog.isDataAvailable();
-		}
-		else {
-			return bufferAndBacklog.isEventAvailable();
-		}
-	}
-
 	@Override
 	public InputChannelID getReceiverId() {
 		return receiverId;
@@ -164,17 +142,16 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	}
 
 	@Override
-	public BufferAndAvailability getNextBuffer() throws IOException {
-		BufferAndBacklog next = subpartitionView.getNextBuffer();
+	public MessageAndAvailability getNextMessage() throws IOException {
+		ResultSubpartitionView.RawMessage next = subpartitionView.getNextRawMessage();
 		if (next != null) {
 			sequenceNumber++;
 
-			if (next.buffer().isBuffer() && --numCreditsAvailable < 0) {
+			if (next.isBuffer() && --numCreditsAvailable < 0) {
 				throw new IllegalStateException("no credit available");
 			}
 
-			return new BufferAndAvailability(
-				next.buffer(), isAvailable(next), next.buffersInBacklog());
+			return new MessageAndAvailability(next.buildMessage(receiverId, sequenceNumber), next.isMoreAvailable(numCreditsAvailable));
 		} else {
 			return null;
 		}

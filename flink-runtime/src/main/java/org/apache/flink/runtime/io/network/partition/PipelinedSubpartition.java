@@ -224,7 +224,7 @@ public class PipelinedSubpartition extends ResultSubpartition implements Checkpo
 	}
 
 	@Nullable
-	BufferAndBacklog pollBuffer() {
+	ResultSubpartitionView.RawMessage pollBuffer() {
 		synchronized (buffers) {
 			if (isBlockedByCheckpoint) {
 				return null;
@@ -276,11 +276,11 @@ public class PipelinedSubpartition extends ResultSubpartition implements Checkpo
 			// Do not report last remaining buffer on buffers as available to read (assuming it's unfinished).
 			// It will be reported for reading either on flush or when the number of buffers in the queue
 			// will be 2 or more.
-			return new BufferAndBacklog(
+			return new ResultSubpartitionView.BufferRawMessage(
 				buffer,
 				isDataAvailableUnsafe(),
-				getBuffersInBacklog(),
-				isEventAvailableUnsafe());
+				isEventAvailableUnsafe(),
+				getBuffersInBacklog());
 		}
 	}
 

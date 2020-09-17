@@ -202,7 +202,7 @@ class PartitionRequestQueue extends ChannelInboundHandlerAdapter {
 		// input channel logic. You can think of this class acting as the input
 		// gate and the consumed views as the local input channels.
 
-		BufferAndAvailability next = null;
+		NetworkSequenceViewReader.MessageAndAvailability next = null;
 		try {
 			while (true) {
 				NetworkSequenceViewReader reader = pollAvailableReader();
@@ -213,7 +213,7 @@ class PartitionRequestQueue extends ChannelInboundHandlerAdapter {
 					return;
 				}
 
-				next = reader.getNextBuffer();
+				next = reader.getNextMessage();
 				if (next == null) {
 					if (!reader.isReleased()) {
 						continue;
@@ -234,22 +234,16 @@ class PartitionRequestQueue extends ChannelInboundHandlerAdapter {
 						registerAvailableReader(reader);
 					}
 
-					BufferResponse msg = new BufferResponse(
-						next.buffer(),
-						reader.getSequenceNumber(),
-						reader.getReceiverId(),
-						next.buffersInBacklog());
-
 					// Write and flush and wait until this is done before
 					// trying to continue with the next buffer.
-					channel.writeAndFlush(msg).addListener(writeListener);
+					channel.writeAndFlush(next.getMessage()).addListener(writeListener);
 
 					return;
 				}
 			}
 		} catch (Throwable t) {
 			if (next != null) {
-				next.buffer().recycleBuffer();
+				next.getMessage().releaseBuffer();
 			}
 
 			throw new IOException(t.getMessage(), t);

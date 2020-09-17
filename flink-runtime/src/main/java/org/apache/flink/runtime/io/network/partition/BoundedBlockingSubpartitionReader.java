@@ -42,7 +42,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 
 	/** The next buffer (look ahead). Null once the data is depleted or reader is disposed. */
 	@Nullable
-	private Buffer nextBuffer;
+	private RawMessage nextBuffer;
 
 	/** The reader/decoder to the memory mapped region with the data we currently read from.
 	 * Null once the reader empty or disposed.*/
@@ -68,7 +68,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 
 		checkNotNull(data);
 		this.dataReader = data.createReader(this);
-		this.nextBuffer = dataReader.nextBuffer();
+		this.nextBuffer = dataReader.nextMessage();
 
 		checkArgument(numDataBuffers >= 0);
 		this.dataBufferBacklog = numDataBuffers;
@@ -78,8 +78,8 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 
 	@Nullable
 	@Override
-	public BufferAndBacklog getNextBuffer() throws IOException {
-		final Buffer current = nextBuffer; // copy reference to stack
+	public RawMessage getNextRawMessage() throws IOException {
+		final RawMessage current = nextBuffer; // copy reference to stack
 
 		if (current == null) {
 			// as per contract, we must return null when the reader is empty,
@@ -91,7 +91,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 		}
 
 		assert dataReader != null;
-		nextBuffer = dataReader.nextBuffer();
+		nextBuffer = dataReader.nextMessage();
 
 		return BufferAndBacklog.fromBufferAndLookahead(current, nextBuffer, dataBufferBacklog);
 	}

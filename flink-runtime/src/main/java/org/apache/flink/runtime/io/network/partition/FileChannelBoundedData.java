@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.core.memory.MemorySegment;
-import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.util.IOUtils;
@@ -27,12 +26,12 @@ import org.apache.flink.util.IOUtils;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayDeque;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -109,46 +108,62 @@ final class FileChannelBoundedData implements BoundedData {
 
 	static final class FileBufferReader implements BoundedData.Reader, BufferRecycler {
 
-		private static final int NUM_BUFFERS = 2;
-
 		private final FileChannel fileChannel;
 
 		private final ByteBuffer headerBuffer;
 
-		private final ArrayDeque<MemorySegment> buffers;
-
 		private final ResultSubpartitionView subpartitionView;
+
+		private final int bufferSize;
+
+		private final long channelSize;
+
+		private long position;
 
 		/** The tag indicates whether we have read the end of this file. */
 		private boolean isFinished;
 
-		FileBufferReader(FileChannel fileChannel, int bufferSize, ResultSubpartitionView subpartitionView) {
+		FileBufferReader(FileChannel fileChannel, int bufferSize, ResultSubpartitionView subpartitionView) throws IOException {
 			this.fileChannel = checkNotNull(fileChannel);
+			this.channelSize = fileChannel.size();
+			this.bufferSize = bufferSize;
 			this.headerBuffer = BufferReaderWriterUtil.allocatedHeaderBuffer();
-			this.buffers = new ArrayDeque<>(NUM_BUFFERS);
-
-			for (int i = 0; i < NUM_BUFFERS; i++) {
-				buffers.addLast(MemorySegmentFactory.allocateUnpooledOffHeapMemory(bufferSize, null));
-			}
-
 			this.subpartitionView = checkNotNull(subpartitionView);
 		}
 
 		@Nullable
 		@Override
-		public Buffer nextBuffer() throws IOException {
-			final MemorySegment memory = buffers.pollFirst();
-			if (memory == null) {
+		public ResultSubpartitionView.RawMessage nextMessage() throws IOException {
+			if (position >= channelSize) {
+				isFinished = true;
 				return null;
 			}
 
-			final Buffer next = BufferReaderWriterUtil.readFromByteChannel(fileChannel, headerBuffer, memory, this);
-			if (next == null) {
-				isFinished = true;
-				recycle(memory);
+			headerBuffer.clear();
+			if (!BufferReaderWriterUtil.tryReadByteBuffer(fileChannel, headerBuffer)) {
+				return null;
+			}
+			headerBuffer.flip();
+
+			final boolean isEvent;
+			final boolean isCompressed;
+			final int size;
+
+			try {
+				isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
+				isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
+				size = headerBuffer.getInt();
+			}
+			catch (BufferUnderflowException | IllegalArgumentException e) {
+				// buffer underflow if header buffer is undersized
+				// IllegalArgumentException if size is outside memory segment size
+				throwCorruptDataException();
+				return null; // silence compiler
 			}
 
-			return next;
+			BufferReaderWriterUtil.readFromByteChannel(fileChannel, headerBuffer, this);
+			boolean isAvailable = (position + bufferSize) < channelSize;
+			return new ResultSubpartitionView.FileRawMessage(fileChannel, position, isAvailable, isAvailable, 1);
 		}
 
 		@Override

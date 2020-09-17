@@ -27,6 +27,7 @@ import org.apache.flink.runtime.execution.CancelTaskException;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.netty.NettyMessage;
 import org.apache.flink.runtime.io.network.partition.PartitionException;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
@@ -311,18 +312,18 @@ public abstract class InputChannel {
 	 */
 	public static final class BufferAndAvailability {
 
-		private final Buffer buffer;
+		private final NettyMessage msg;
 		private final boolean moreAvailable;
 		private final int buffersInBacklog;
 
-		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog) {
-			this.buffer = checkNotNull(buffer);
+		public BufferAndAvailability(NettyMessage msg, boolean moreAvailable, int buffersInBacklog) {
+			this.msg = checkNotNull(msg);
 			this.moreAvailable = moreAvailable;
 			this.buffersInBacklog = buffersInBacklog;
 		}
 
-		public Buffer buffer() {
-			return buffer;
+		public NettyMessage getMessage() {
+			return msg;
 		}
 
 		public boolean moreAvailable() {

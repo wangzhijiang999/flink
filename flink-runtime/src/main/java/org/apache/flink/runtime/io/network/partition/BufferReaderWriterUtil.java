@@ -44,13 +44,13 @@ final class BufferReaderWriterUtil {
 
 	static final int HEADER_LENGTH = 8;
 
-	private static final short HEADER_VALUE_IS_BUFFER = 0;
+	static final short HEADER_VALUE_IS_BUFFER = 0;
 
-	private static final short HEADER_VALUE_IS_EVENT = 1;
+	static final short HEADER_VALUE_IS_EVENT = 1;
 
-	private static final short BUFFER_IS_COMPRESSED = 1;
+	static final short BUFFER_IS_COMPRESSED = 1;
 
-	private static final short BUFFER_IS_NOT_COMPRESSED = 0;
+	static final short BUFFER_IS_NOT_COMPRESSED = 0;
 
 	// ------------------------------------------------------------------------
 	//  ByteBuffer read / write
@@ -141,10 +141,9 @@ final class BufferReaderWriterUtil {
 	}
 
 	@Nullable
-	static Buffer readFromByteChannel(
+	static ByteBuffer readFromByteChannel(
 			FileChannel channel,
 			ByteBuffer headerBuffer,
-			MemorySegment memorySegment,
 			BufferRecycler bufferRecycler) throws IOException {
 
 		headerBuffer.clear();
@@ -187,7 +186,7 @@ final class BufferReaderWriterUtil {
 		return new ByteBuffer[] { allocatedHeaderBuffer(), null };
 	}
 
-	private static boolean tryReadByteBuffer(FileChannel channel, ByteBuffer b) throws IOException {
+	static boolean tryReadByteBuffer(FileChannel channel, ByteBuffer b) throws IOException {
 		if (channel.read(b) == -1) {
 			return false;
 		}

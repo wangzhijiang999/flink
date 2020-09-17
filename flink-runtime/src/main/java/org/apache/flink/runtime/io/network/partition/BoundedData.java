@@ -83,6 +83,6 @@ interface BoundedData extends Closeable {
 	interface Reader extends Closeable {
 
 		@Nullable
-		Buffer nextBuffer() throws IOException;
+		ResultSubpartitionView.RawMessage nextMessage() throws IOException;
 	}
 }

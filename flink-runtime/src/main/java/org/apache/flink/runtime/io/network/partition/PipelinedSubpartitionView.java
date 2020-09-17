@@ -49,7 +49,7 @@ public class PipelinedSubpartitionView implements ResultSubpartitionView {
 
 	@Nullable
 	@Override
-	public BufferAndBacklog getNextBuffer() {
+	public RawMessage getNextRawMessage() {
 		return parent.pollBuffer();
 	}
 

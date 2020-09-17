@@ -19,11 +19,14 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.netty.NettyMessage;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 
 /**
  * A view to consume a {@link ResultSubpartition} instance.
@@ -42,7 +45,7 @@ public interface ResultSubpartitionView {
 	 * after it has been consumed.
 	 */
 	@Nullable
-	BufferAndBacklog getNextBuffer() throws IOException;
+	RawMessage getNextRawMessage() throws IOException;
 
 	void notifyDataAvailable();
 
@@ -57,4 +60,102 @@ public interface ResultSubpartitionView {
 	boolean isAvailable(int numCreditsAvailable);
 
 	int unsynchronizedGetNumberOfQueuedBuffers();
+
+
+	abstract class RawMessage {
+		private final boolean isDataAvailable;
+		private final boolean isEventAvailable;
+		protected final int buffersInBacklog;
+
+		RawMessage(boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
+			this.isDataAvailable = isDataAvailable;
+			this.isEventAvailable = isEventAvailable;
+			this.buffersInBacklog = buffersInBacklog;
+		}
+
+		public boolean isMoreAvailable(int credits) {
+			boolean moreAvailable;
+			if (credits > 0) {
+				moreAvailable = isDataAvailable;
+			} else {
+				moreAvailable = isEventAvailable;
+			}
+			return moreAvailable;
+		}
+
+		public boolean isBuffer() {
+			return true;
+		}
+
+		public abstract NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
+	}
+
+	class BufferRawMessage extends RawMessage {
+		private final Buffer buffer;
+
+		BufferRawMessage(Buffer buffer, boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
+			super(isDataAvailable, isEventAvailable, buffersInBacklog);
+			this.buffer = buffer;
+		}
+
+		@Override
+		public NettyMessage buildMessage(InputChannelID id, int sequenceNumber) {
+			return new NettyMessage.BufferResponse(
+				buffer,
+				buffer.getDataType(),
+				buffer.isCompressed(),
+				sequenceNumber,
+				id,
+				buffersInBacklog,
+				buffer.readableBytes());
+
+		}
+
+		@Override
+		public boolean isBuffer() {
+			return buffer.isBuffer();
+		}
+	}
+
+	class FileRawMessage extends RawMessage {
+		private final FileChannel fileChannel;
+		private final long position;
+
+		private final Buffer.DataType dataType;
+		private final boolean isCompressed;
+		private final int size;
+
+		FileRawMessage(
+			FileChannel fileChannel,
+			long position,
+			boolean isDataAvailable,
+			boolean isEventAvailable,
+			Buffer.DataType dataType,
+			boolean isCompressed,
+			int buffersInBacklog,
+			int size) {
+
+			super(isDataAvailable, isEventAvailable, buffersInBacklog);
+			this.fileChannel = fileChannel;
+			this.position = position;
+			this.dataType = dataType;
+			this.isCompressed = isCompressed;
+			this.size = size;
+		}
+
+		@Override
+		public NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException {
+			return new NettyMessage.BatchFileRegion(
+				fileChannel,
+				fileChannel.size(),
+				dataType,
+				isCompressed,
+				sequenceNumber,
+				id,
+				buffersInBacklog,
+				position,
+				size);
+
+		}
+	}
 }
