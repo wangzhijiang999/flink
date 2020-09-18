@@ -24,6 +24,7 @@ import javax.annotation.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 
 /**
  * BoundedData is the data store in a single bounded blocking subpartition.
@@ -83,6 +84,82 @@ interface BoundedData extends Closeable {
 	interface Reader extends Closeable {
 
 		@Nullable
-		ResultSubpartitionView.RawMessage nextMessage() throws IOException;
+		RawData nextData() throws IOException;
+	}
+
+	interface RawData {
+
+		boolean isBuffer();
+
+		ResultSubpartitionView.RawMessage buildRawMessage(
+			boolean isDataAvailable,
+			boolean isEventAvailable,
+			int dataBufferBacklog);
+	}
+
+	final class FileRegionData implements RawData {
+
+		private final FileChannel channel;
+		private final long position;
+		private final int size;
+		private final Buffer.DataType type;
+		private final boolean isCompressed;
+
+		FileRegionData(FileChannel channel, long position,  int size, Buffer.DataType type, boolean isCompressed) {
+			this.channel = channel;
+			this.position = position;
+			this.size = size;
+			this.type = type;
+			this.isCompressed = isCompressed;
+		}
+
+		@Override
+		public boolean isBuffer() {
+			return type == Buffer.DataType.DATA_BUFFER;
+		}
+
+		@Override
+		public ResultSubpartitionView.RawMessage buildRawMessage(
+			boolean isDataAvailable,
+			boolean isEventAvailable,
+			int dataBufferBacklog) {
+
+			return new ResultSubpartitionView.RawFileRegion(
+				channel,
+				position,
+				size,
+				isDataAvailable,
+				isEventAvailable,
+				type,
+				isCompressed,
+				dataBufferBacklog);
+		}
+	}
+
+	final class BufferWrapper implements RawData {
+
+		private final Buffer buffer;
+
+		BufferWrapper(Buffer buffer) {
+			this.buffer = buffer;
+		}
+
+		@Override
+		public boolean isBuffer() {
+			return buffer.isBuffer();
+		}
+
+		@Override
+		public ResultSubpartitionView.RawMessage buildRawMessage(
+			boolean isDataAvailable,
+			boolean isEventAvailable,
+			int dataBufferBacklog) {
+
+			return new ResultSubpartitionView.RawBufferMessage(
+				buffer,
+				isDataAvailable,
+				isEventAvailable,
+				dataBufferBacklog);
+		}
 	}
 }

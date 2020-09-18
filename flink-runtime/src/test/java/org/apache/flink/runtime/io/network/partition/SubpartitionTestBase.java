@@ -27,6 +27,7 @@ import org.junit.Test;
 import static org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils.createFilledFinishedBufferConsumer;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -143,11 +144,11 @@ public abstract class SubpartitionTestBase extends TestLogger {
 		reader.releaseAllResources();
 
 		// the reader must not throw an exception
-		reader.getNextBuffer();
+		reader.getNextRawMessage();
 
 		// ideally, we want this to be null, but the pipelined partition still serves data
 		// after dispose (which is unintuitive, but does not affect correctness)
-//		assertNull(reader.getNextBuffer());
+		assertNull(reader.getNextRawMessage());
 	}
 
 	@Test

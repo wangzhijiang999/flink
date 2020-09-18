@@ -91,35 +91,35 @@ public class TestSubpartitionConsumer implements Callable<Boolean>, BufferAvaila
 					}
 				}
 
-				final BufferAndBacklog bufferAndBacklog = subpartitionView.getNextBuffer();
+				final ResultSubpartitionView.RawMessage bufferAndBacklog = subpartitionView.getNextRawMessage();
 
 				if (isSlowConsumer) {
 					Thread.sleep(random.nextInt(MAX_SLEEP_TIME_MS + 1));
 				}
 
-				if (bufferAndBacklog != null) {
-					if (bufferAndBacklog.isDataAvailable()) {
-						dataAvailableNotification.set(true);
-					}
-					if (bufferAndBacklog.buffer().isBuffer()) {
-						callback.onBuffer(bufferAndBacklog.buffer());
-					} else {
-						final AbstractEvent event = EventSerializer.fromBuffer(bufferAndBacklog.buffer(),
-							getClass().getClassLoader());
-
-						callback.onEvent(event);
-
-						bufferAndBacklog.buffer().recycleBuffer();
-
-						if (event.getClass() == EndOfPartitionEvent.class) {
-							subpartitionView.releaseAllResources();
-
-							return true;
-						}
-					}
-				} else if (subpartitionView.isReleased()) {
-					return true;
-				}
+//				if (bufferAndBacklog != null) {
+//					if (bufferAndBacklog.isDataAvailable()) {
+//						dataAvailableNotification.set(true);
+//					}
+//					if (bufferAndBacklog.buffer().isBuffer()) {
+//						callback.onBuffer(bufferAndBacklog.buffer());
+//					} else {
+//						final AbstractEvent event = EventSerializer.fromBuffer(bufferAndBacklog.buffer(),
+//							getClass().getClassLoader());
+//
+//						callback.onEvent(event);
+//
+//						bufferAndBacklog.buffer().recycleBuffer();
+//
+//						if (event.getClass() == EndOfPartitionEvent.class) {
+//							subpartitionView.releaseAllResources();
+//
+//							return true;
+//						}
+//					}
+//				} else if (subpartitionView.isReleased()) {
+//					return true;
+//				}
 			}
 		} finally {
 			subpartitionView.releaseAllResources();

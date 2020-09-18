@@ -173,14 +173,6 @@ public abstract class ResultSubpartition {
 		public boolean isEventAvailable() {
 			return isEventAvailable;
 		}
-
-		public static BufferAndBacklog fromBufferAndLookahead(Buffer current, Buffer lookahead, int backlog) {
-			return new BufferAndBacklog(
-					current,
-					lookahead != null,
-					backlog,
-					lookahead != null && !lookahead.isBuffer());
-		}
 	}
 
 }

@@ -61,12 +61,10 @@ public interface ResultSubpartitionView {
 
 	int unsynchronizedGetNumberOfQueuedBuffers();
 
-	int getDataBufferBacklog();
-
 	abstract class RawMessage {
 		private final boolean isDataAvailable;
 		private final boolean isEventAvailable;
-		protected final int buffersInBacklog;
+		final int buffersInBacklog;
 
 		RawMessage(boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
 			this.isDataAvailable = isDataAvailable;
@@ -88,13 +86,25 @@ public interface ResultSubpartitionView {
 			return true;
 		}
 
+		public boolean isDataAvailable() {
+			return isDataAvailable;
+		}
+
+		public boolean isEventAvailable() {
+			return isEventAvailable;
+		}
+
+		public int buffersInBacklog() {
+			return buffersInBacklog;
+		}
+
 		public abstract NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
 	}
 
-	class BufferRawMessage extends RawMessage {
+	class RawBufferMessage extends RawMessage {
 		private final Buffer buffer;
 
-		BufferRawMessage(Buffer buffer, boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
+		public RawBufferMessage(Buffer buffer, boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
 			super(isDataAvailable, isEventAvailable, buffersInBacklog);
 			this.buffer = buffer;
 		}
@@ -116,47 +126,49 @@ public interface ResultSubpartitionView {
 		public boolean isBuffer() {
 			return buffer.isBuffer();
 		}
+
+		public Buffer buffer() {
+			return buffer;
+		}
 	}
 
-	class FileRawMessage extends RawMessage {
+	class RawFileRegion extends RawMessage {
 		private final FileChannel fileChannel;
 		private final long position;
-
+		private final int size;
 		private final Buffer.DataType dataType;
 		private final boolean isCompressed;
-		private final int size;
 
-		FileRawMessage(
+		RawFileRegion(
 			FileChannel fileChannel,
 			long position,
+			int size,
 			boolean isDataAvailable,
 			boolean isEventAvailable,
 			Buffer.DataType dataType,
 			boolean isCompressed,
-			int buffersInBacklog,
-			int size) {
+			int buffersInBacklog) {
 
 			super(isDataAvailable, isEventAvailable, buffersInBacklog);
 			this.fileChannel = fileChannel;
 			this.position = position;
+			this.size = size;
 			this.dataType = dataType;
 			this.isCompressed = isCompressed;
-			this.size = size;
 		}
 
 		@Override
 		public NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException {
-			return new NettyMessage.BatchFileRegion(
+			return new NettyMessage.FileRegionMessage(
 				fileChannel,
 				fileChannel.size(),
+				position,
+				size,
 				dataType,
 				isCompressed,
-				sequenceNumber,
-				id,
 				buffersInBacklog,
-				position,
-				size);
-
+				sequenceNumber,
+				id);
 		}
 	}
 }

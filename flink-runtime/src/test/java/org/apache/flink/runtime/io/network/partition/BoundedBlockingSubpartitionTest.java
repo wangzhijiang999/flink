@@ -175,7 +175,7 @@ public class BoundedBlockingSubpartitionTest extends SubpartitionTestBase {
 
 		@Nullable
 		@Override
-		public Buffer nextBuffer() throws IOException {
+		public BoundedData.RawData nextData() throws IOException {
 			return null;
 		}
 

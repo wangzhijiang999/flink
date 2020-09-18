@@ -173,23 +173,23 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 		long expectedNextLong = 0L;
 		int nextExpectedBacklog = numBuffers - 1;
 
-		while ((next = reader.getNextBuffer()) != null && next.buffer().isBuffer()) {
-			assertTrue(next.isDataAvailable());
-			assertEquals(nextExpectedBacklog, next.buffersInBacklog());
-
-			ByteBuffer buffer = next.buffer().getNioBufferReadable();
-			if (compressionEnabled && next.buffer().isCompressed()) {
-				Buffer uncompressedBuffer = decompressor.decompressToIntermediateBuffer(next.buffer());
-				buffer = uncompressedBuffer.getNioBufferReadable();
-				uncompressedBuffer.recycleBuffer();
-			}
-			while (buffer.hasRemaining()) {
-				assertEquals(expectedNextLong++, buffer.getLong());
-			}
-
-			next.buffer().recycleBuffer();
-			nextExpectedBacklog--;
-		}
+//		while ((next = reader.getNextBuffer()) != null && next.buffer().isBuffer()) {
+//			assertTrue(next.isDataAvailable());
+//			assertEquals(nextExpectedBacklog, next.buffersInBacklog());
+//
+//			ByteBuffer buffer = next.buffer().getNioBufferReadable();
+//			if (compressionEnabled && next.buffer().isCompressed()) {
+//				Buffer uncompressedBuffer = decompressor.decompressToIntermediateBuffer(next.buffer());
+//				buffer = uncompressedBuffer.getNioBufferReadable();
+//				uncompressedBuffer.recycleBuffer();
+//			}
+//			while (buffer.hasRemaining()) {
+//				assertEquals(expectedNextLong++, buffer.getLong());
+//			}
+//
+//			next.buffer().recycleBuffer();
+//			nextExpectedBacklog--;
+//		}
 
 		assertEquals(numLongs, expectedNextLong);
 		assertEquals(-1, nextExpectedBacklog);

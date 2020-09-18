@@ -18,8 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
-import org.apache.flink.runtime.io.network.buffer.Buffer;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.util.IOUtils;
 
 import javax.annotation.Nullable;
@@ -42,7 +40,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 
 	/** The next buffer (look ahead). Null once the data is depleted or reader is disposed. */
 	@Nullable
-	private RawMessage nextBuffer;
+	private BoundedData.RawData nextData;
 
 	/** The reader/decoder to the memory mapped region with the data we currently read from.
 	 * Null once the reader empty or disposed.*/
@@ -68,7 +66,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 
 		checkNotNull(data);
 		this.dataReader = data.createReader(this);
-		this.nextBuffer = dataReader.nextMessage();
+		this.nextData = dataReader.nextData();
 
 		checkArgument(numDataBuffers >= 0);
 		this.dataBufferBacklog = numDataBuffers;
@@ -79,7 +77,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 	@Nullable
 	@Override
 	public RawMessage getNextRawMessage() throws IOException {
-		final RawMessage current = nextBuffer; // copy reference to stack
+		final BoundedData.RawData current = nextData; // copy reference to stack
 
 		if (current == null) {
 			// as per contract, we must return null when the reader is empty,
@@ -91,25 +89,28 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 		}
 
 		assert dataReader != null;
-		nextBuffer = dataReader.nextMessage();
+		nextData = dataReader.nextData();
 
-		return BufferAndBacklog.fromBufferAndLookahead(current, nextBuffer, dataBufferBacklog);
+		return current.buildRawMessage(
+			nextData != null,
+			nextData != null && !nextData.isBuffer(),
+			dataBufferBacklog);
 	}
 
 	/**
 	 * This method is actually only meaningful for the {@link BoundedBlockingSubpartitionType#FILE}.
 	 *
-	 * <p>For the other types the {@link #nextBuffer} can not be ever set to null, so it is no need
+	 * <p>For the other types the {@link #nextData} can not be ever set to null, so it is no need
 	 * to notify available via this method. But the implementation is also compatible with other
 	 * types even though called by mistake.
 	 */
 	@Override
 	public void notifyDataAvailable() {
-		if (nextBuffer == null) {
+		if (nextData == null) {
 			assert dataReader != null;
 
 			try {
-				nextBuffer = dataReader.nextMessage();
+				nextData = dataReader.nextData();
 			} catch (IOException ex) {
 				// this exception wrapper is only for avoiding throwing IOException explicitly
 				// in relevant interface methods
@@ -117,7 +118,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 			}
 
 			// next buffer is null indicates the end of partition
-			if (nextBuffer != null) {
+			if (nextData != null) {
 				availabilityListener.notifyDataAvailable();
 			}
 		}
@@ -131,7 +132,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 		IOUtils.closeQuietly(dataReader);
 
 		// nulling these fields means the read method and will fail fast
-		nextBuffer = null;
+		nextData = null;
 		dataReader = null;
 
 		// Notify the parent that this one is released. This allows the parent to
@@ -153,10 +154,10 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 	@Override
 	public boolean isAvailable(int numCreditsAvailable) {
 		if (numCreditsAvailable > 0) {
-			return nextBuffer != null;
+			return nextData != null;
 		}
 
-		return nextBuffer != null && !nextBuffer.isBuffer();
+		return nextData != null && !nextData.isBuffer();
 	}
 
 	@Override
@@ -168,11 +169,6 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 	@Override
 	public int unsynchronizedGetNumberOfQueuedBuffers() {
 		return parent.unsynchronizedGetNumberOfQueuedBuffers();
-	}
-
-	@Override
-	public int getDataBufferBacklog() {
-		return this.dataBufferBacklog;
 	}
 
 	@Override

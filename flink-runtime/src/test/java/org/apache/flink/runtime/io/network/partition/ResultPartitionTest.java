@@ -495,9 +495,10 @@ public class ResultPartitionTest {
 
 					int numConsumedBuffers = 0;
 					while (numConsumedBuffers != totalStates) {
-						ResultSubpartition.BufferAndBacklog bufferAndBacklog = view.getNextBuffer();
+						ResultSubpartitionView.RawMessage bufferAndBacklog = view.getNextRawMessage();
 						if (bufferAndBacklog != null) {
-							Buffer buffer = bufferAndBacklog.buffer();
+							assertTrue(bufferAndBacklog instanceof ResultSubpartitionView.RawBufferMessage);
+							Buffer buffer = ((ResultSubpartitionView.RawBufferMessage) bufferAndBacklog).buffer();
 							BufferBuilderAndConsumerTest.assertContent(
 								buffer,
 								partition.getBufferPool()
@@ -509,7 +510,7 @@ public class ResultPartitionTest {
 							Thread.sleep(5);
 						}
 					}
-					assertNull(view.getNextBuffer());
+					assertNull(view.getNextRawMessage());
 				}
 				return null;
 			};

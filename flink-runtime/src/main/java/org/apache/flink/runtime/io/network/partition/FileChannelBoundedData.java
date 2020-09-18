@@ -18,15 +18,12 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
-import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
-import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.util.IOUtils;
 
 import javax.annotation.Nullable;
 
 import java.io.IOException;
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -50,16 +47,9 @@ final class FileChannelBoundedData implements BoundedData {
 
 	private long size;
 
-	private final int memorySegmentSize;
-
-	FileChannelBoundedData(
-			Path filePath,
-			FileChannel fileChannel,
-			int memorySegmentSize) {
-
+	FileChannelBoundedData(Path filePath, FileChannel fileChannel) {
 		this.filePath = checkNotNull(filePath);
 		this.fileChannel = checkNotNull(fileChannel);
-		this.memorySegmentSize = memorySegmentSize;
 		this.headerAndBufferArray = BufferReaderWriterUtil.allocatedWriteBufferArray();
 	}
 
@@ -78,7 +68,7 @@ final class FileChannelBoundedData implements BoundedData {
 		checkState(!fileChannel.isOpen());
 
 		final FileChannel fc = FileChannel.open(filePath, StandardOpenOption.READ);
-		return new FileBufferReader(fc, memorySegmentSize, subpartitionView);
+		return new FileBufferReader(fc);
 	}
 
 	@Override
@@ -94,48 +84,40 @@ final class FileChannelBoundedData implements BoundedData {
 
 	// ------------------------------------------------------------------------
 
-	public static FileChannelBoundedData create(Path filePath, int memorySegmentSize) throws IOException {
+	public static FileChannelBoundedData create(Path filePath) throws IOException {
 		final FileChannel fileChannel = FileChannel.open(
 				filePath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
 
-		return new FileChannelBoundedData(
-				filePath,
-				fileChannel,
-				memorySegmentSize);
+		return new FileChannelBoundedData(filePath, fileChannel);
 	}
 
 	// ------------------------------------------------------------------------
 
-	static final class FileBufferReader implements BoundedData.Reader, BufferRecycler {
+	static final class FileBufferReader implements BoundedData.Reader {
 
 		private final FileChannel fileChannel;
 
 		private final ByteBuffer headerBuffer;
 
-		private final ResultSubpartitionView subpartitionView;
-
-		private final int bufferSize;
-
 		private final long fileSize;
 
 		private long position;
 
-		/** The tag indicates whether we have read the end of this file. */
-		private boolean isFinished;
+		private int lastSize;
 
-		FileBufferReader(FileChannel fileChannel, int bufferSize, ResultSubpartitionView subpartitionView) throws IOException {
+		FileBufferReader(FileChannel fileChannel) throws IOException {
 			this.fileChannel = checkNotNull(fileChannel);
 			this.fileSize = fileChannel.size();
-			this.bufferSize = bufferSize;
 			this.headerBuffer = BufferReaderWriterUtil.allocatedHeaderBuffer();
-			this.subpartitionView = checkNotNull(subpartitionView);
 		}
 
 		@Nullable
 		@Override
-		public ResultSubpartitionView.RawMessage nextMessage() throws IOException {
+		public FileRegionData nextData() throws IOException {
+			if (position != 0) {
+				position += lastSize;
+			}
 			if (position >= fileSize) {
-				isFinished = true;
 				return null;
 			}
 
@@ -145,35 +127,18 @@ final class FileChannelBoundedData implements BoundedData {
 			}
 			headerBuffer.flip();
 
+			position += BufferReaderWriterUtil.HEADER_LENGTH;
 			boolean isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
 			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
-			int size = headerBuffer.getInt();
+			lastSize = headerBuffer.getInt();
 			Buffer.DataType dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
 
-			boolean isAvailable = (position + bufferSize) < fileSize;
-			return new ResultSubpartitionView.FileRawMessage(
-				fileChannel,
-				position,
-				isAvailable,
-				isAvailable,
-				dataType,
-				isCompressed,
-				subpartitionView.getDataBufferBacklog(),
-				size);
+			return new FileRegionData(fileChannel, position, lastSize, dataType, isCompressed);
 		}
 
 		@Override
 		public void close() throws IOException {
 			fileChannel.close();
-		}
-
-		@Override
-		public void recycle(MemorySegment memorySegment) {
-			buffers.addLast(memorySegment);
-
-			if (!isFinished) {
-				subpartitionView.notifyDataAvailable();
-			}
 		}
 	}
 }

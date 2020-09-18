@@ -45,6 +45,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils.buildBufferWithAscendingInts;
 import static org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils.createBufferBuilder;
 import static org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils.createEventBufferConsumer;
 import static org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils.createFilledFinishedBufferConsumer;
@@ -59,6 +60,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Additional tests for {@link PipelinedSubpartition} which require an availability listener and a
@@ -103,7 +105,7 @@ public class PipelinedSubpartitionWithReadViewTest {
 	public void testAddTwoNonFinishedBuffer() throws IOException {
 		subpartition.add(createBufferBuilder().createBufferConsumer());
 		subpartition.add(createBufferBuilder().createBufferConsumer());
-		assertNull(readView.getNextBuffer());
+		assertNull(readView.getNextRawMessage());
 	}
 
 	@Test
@@ -114,7 +116,7 @@ public class PipelinedSubpartitionWithReadViewTest {
 		subpartition.add(bufferBuilder.createBufferConsumer());
 
 		assertEquals(0, availablityListener.getNumNotifications());
-		assertNull(readView.getNextBuffer());
+		assertNull(readView.getNextRawMessage());
 
 		bufferBuilder.finish();
 		bufferBuilder = createBufferBuilder();
@@ -122,7 +124,7 @@ public class PipelinedSubpartitionWithReadViewTest {
 
 		assertEquals(1, subpartition.getBuffersInBacklog());
 		assertEquals(1, availablityListener.getNumNotifications()); // notification from finishing previous buffer.
-		assertNull(readView.getNextBuffer());
+		assertNull(readView.getNextRawMessage());
 		assertEquals(0, subpartition.getBuffersInBacklog());
 	}
 
@@ -390,14 +392,15 @@ public class PipelinedSubpartitionWithReadViewTest {
 		int numberOfConsumableBuffers = 0;
 		try (final CloseableRegistry closeableRegistry = new CloseableRegistry()) {
 			while (readView.isAvailable(Integer.MAX_VALUE)) {
-				ResultSubpartition.BufferAndBacklog bufferAndBacklog = readView.getNextBuffer();
+				ResultSubpartitionView.RawMessage bufferAndBacklog = readView.getNextRawMessage();
 				assertNotNull(bufferAndBacklog);
+				assertTrue(bufferAndBacklog instanceof ResultSubpartitionView.RawBufferMessage);
 
-				if (bufferAndBacklog.buffer().isBuffer()) {
+				if (((ResultSubpartitionView.RawBufferMessage) bufferAndBacklog).buffer().isBuffer()) {
 					++numberOfConsumableBuffers;
 				}
 
-				closeableRegistry.registerCloseable(bufferAndBacklog.buffer() :: recycleBuffer);
+				closeableRegistry.registerCloseable(((ResultSubpartitionView.RawBufferMessage) bufferAndBacklog).buffer() :: recycleBuffer);
 			}
 
 			assertThat(backlog, is(numberOfConsumableBuffers));
@@ -511,16 +514,18 @@ public class PipelinedSubpartitionWithReadViewTest {
 			boolean expectedRecycledAfterRecycle) throws IOException, InterruptedException {
 		checkArgument(expectedEventClass == null || !expectedIsBuffer);
 
-		ResultSubpartition.BufferAndBacklog bufferAndBacklog = readView.getNextBuffer();
+		ResultSubpartitionView.RawMessage bufferAndBacklog = readView.getNextRawMessage();
 		assertNotNull(bufferAndBacklog);
+		assertTrue(bufferAndBacklog instanceof ResultSubpartitionView.RawBufferMessage);
+		Buffer buffer = ((ResultSubpartitionView.RawBufferMessage) bufferAndBacklog).buffer();
 		try {
 			assertEquals("buffer size", expectedReadableBufferSize,
-					bufferAndBacklog.buffer().readableBytes());
+					buffer.readableBytes());
 			assertEquals("buffer or event", expectedIsBuffer,
-					bufferAndBacklog.buffer().isBuffer());
+					buffer.isBuffer());
 			if (expectedEventClass != null) {
 				Assert.assertThat(EventSerializer
-								.fromBuffer(bufferAndBacklog.buffer(), ClassLoader.getSystemClassLoader()),
+								.fromBuffer(buffer, ClassLoader.getSystemClassLoader()),
 						instanceOf(expectedEventClass));
 			}
 			assertEquals("data available", expectedIsDataAvailable,
@@ -530,14 +535,14 @@ public class PipelinedSubpartitionWithReadViewTest {
 			assertEquals("event available", expectedIsEventAvailable, bufferAndBacklog.isEventAvailable());
 			assertEquals("event available", expectedIsEventAvailable, readView.isAvailable(0));
 
-			assertFalse("not recycled", bufferAndBacklog.buffer().isRecycled());
+			assertFalse("not recycled", buffer.isRecycled());
 		} finally {
-			bufferAndBacklog.buffer().recycleBuffer();
+			buffer.recycleBuffer();
 		}
-		assertEquals("recycled", expectedRecycledAfterRecycle, bufferAndBacklog.buffer().isRecycled());
+		assertEquals("recycled", expectedRecycledAfterRecycle, buffer.isRecycled());
 	}
 
 	static void assertNoNextBuffer(ResultSubpartitionView readView) throws IOException, InterruptedException {
-		assertNull(readView.getNextBuffer());
+		assertNull(readView.getNextRawMessage());
 	}
 }

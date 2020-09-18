@@ -276,7 +276,7 @@ public class PipelinedSubpartition extends ResultSubpartition implements Checkpo
 			// Do not report last remaining buffer on buffers as available to read (assuming it's unfinished).
 			// It will be reported for reading either on flush or when the number of buffers in the queue
 			// will be 2 or more.
-			return new ResultSubpartitionView.BufferRawMessage(
+			return new ResultSubpartitionView.RawBufferMessage(
 				buffer,
 				isDataAvailableUnsafe(),
 				isEventAvailableUnsafe(),

@@ -21,14 +21,12 @@ package org.apache.flink.runtime.io.network.partition;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
-import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.runtime.io.network.buffer.FreeingBufferRecycler;
 import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 
 import javax.annotation.Nullable;
 
 import java.io.IOException;
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
@@ -138,42 +136,6 @@ final class BufferReaderWriterUtil {
 		}
 
 		return -1L;
-	}
-
-	@Nullable
-	static ByteBuffer readFromByteChannel(
-			FileChannel channel,
-			ByteBuffer headerBuffer,
-			BufferRecycler bufferRecycler) throws IOException {
-
-		headerBuffer.clear();
-		if (!tryReadByteBuffer(channel, headerBuffer)) {
-			return null;
-		}
-		headerBuffer.flip();
-
-		final ByteBuffer targetBuf;
-		final boolean isEvent;
-		final boolean isCompressed;
-		final int size;
-
-		try {
-			isEvent = headerBuffer.getShort() == HEADER_VALUE_IS_EVENT;
-			isCompressed = headerBuffer.getShort() == BUFFER_IS_COMPRESSED;
-			size = headerBuffer.getInt();
-			targetBuf = memorySegment.wrap(0, size);
-		}
-		catch (BufferUnderflowException | IllegalArgumentException e) {
-			// buffer underflow if header buffer is undersized
-			// IllegalArgumentException if size is outside memory segment size
-			throwCorruptDataException();
-			return null; // silence compiler
-		}
-
-		readByteBufferFully(channel, targetBuf);
-
-		Buffer.DataType dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
-		return new NetworkBuffer(memorySegment, bufferRecycler, dataType, isCompressed, size);
 	}
 
 	static ByteBuffer allocatedHeaderBuffer() {

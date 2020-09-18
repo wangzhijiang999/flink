@@ -69,7 +69,7 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 		final ResultSubpartitionView reader = subpartition.createReadView(listener);
 
 		// test
-		final List<BufferAndBacklog> data = drainAvailableData(reader);
+		final List<ResultSubpartitionView.RawMessage> data = drainAvailableData(reader);
 
 		// assert
 		assertFalse(reader.isAvailable(Integer.MAX_VALUE));
@@ -88,9 +88,7 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 		final ResultSubpartitionView reader = subpartition.createReadView(listener);
 
 		// test
-		final List<ResultSubpartition.BufferAndBacklog> data = drainAvailableData(reader);
-		data.get(0).buffer().recycleBuffer();
-		data.get(1).buffer().recycleBuffer();
+		final List<ResultSubpartitionView.RawMessage> data = drainAvailableData(reader);
 
 		// assert
 		assertTrue(reader.isAvailable(Integer.MAX_VALUE));
@@ -124,7 +122,7 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 		ResultPartition parent = PartitionTestUtils.createPartition();
 
 		BoundedBlockingSubpartition partition = BoundedBlockingSubpartition.createWithFileChannel(
-			0, parent, new File(TMP_FOLDER.newFolder(), "data"), BUFFER_SIZE);
+			0, parent, new File(TMP_FOLDER.newFolder(), "data"));
 
 		writeBuffers(partition, numberOfBuffers);
 		partition.finish();
@@ -138,11 +136,11 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 		}
 	}
 
-	private static List<BufferAndBacklog> drainAvailableData(ResultSubpartitionView reader) throws Exception {
-		final ArrayList<BufferAndBacklog> list = new ArrayList<>();
+	private static List<ResultSubpartitionView.RawMessage> drainAvailableData(ResultSubpartitionView reader) throws Exception {
+		final ArrayList<ResultSubpartitionView.RawMessage> list = new ArrayList<>();
 
-		BufferAndBacklog bab;
-		while ((bab = reader.getNextBuffer()) != null) {
+		ResultSubpartitionView.RawMessage bab;
+		while ((bab = reader.getNextRawMessage()) != null) {
 			list.add(bab);
 		}
 
@@ -150,9 +148,9 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 	}
 
 	private static void drainAllData(ResultSubpartitionView reader) throws Exception {
-		BufferAndBacklog bab;
-		while ((bab = reader.getNextBuffer()) != null) {
-			bab.buffer().recycleBuffer();
+		ResultSubpartitionView.RawMessage bab;
+		while ((bab = reader.getNextRawMessage()) != null) {
+			//bab.buffer().recycleBuffer();
 		}
 	}
 }

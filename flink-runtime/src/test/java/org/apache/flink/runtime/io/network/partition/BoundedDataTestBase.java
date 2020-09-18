@@ -124,9 +124,9 @@ public abstract class BoundedDataTestBase {
 			final BoundedData.Reader reader = bd.createReader();
 
 			// check that multiple calls now return empty buffers
-			assertNull(reader.nextBuffer());
-			assertNull(reader.nextBuffer());
-			assertNull(reader.nextBuffer());
+			assertNull(reader.nextData());
+			assertNull(reader.nextData());
+			assertNull(reader.nextData());
 		}
 	}
 
@@ -196,22 +196,22 @@ public abstract class BoundedDataTestBase {
 	}
 
 	private static void readInts(BoundedData.Reader reader, int numBuffersExpected, int numInts) throws IOException {
-		Buffer b;
+		BoundedData.RawData b;
 		int nextValue = 0;
 		int numBuffers = 0;
 
-		while ((b = reader.nextBuffer()) != null) {
-			final int numIntsInBuffer = b.getSize() / 4;
-			if (compressionEnabled && b.isCompressed()) {
-				Buffer decompressedBuffer = DECOMPRESSOR.decompressToIntermediateBuffer(b);
-				BufferBuilderTestUtils.validateBufferWithAscendingInts(decompressedBuffer, numIntsInBuffer, nextValue);
-			} else {
-				BufferBuilderTestUtils.validateBufferWithAscendingInts(b, numIntsInBuffer, nextValue);
-			}
-			nextValue += numIntsInBuffer;
-			numBuffers++;
-
-			b.recycleBuffer();
+		while ((b = reader.nextData()) != null) {
+//			final int numIntsInBuffer = b.getSize() / 4;
+//			if (compressionEnabled && b.isCompressed()) {
+//				Buffer decompressedBuffer = DECOMPRESSOR.decompressToIntermediateBuffer(b);
+//				BufferBuilderTestUtils.validateBufferWithAscendingInts(decompressedBuffer, numIntsInBuffer, nextValue);
+//			} else {
+//				BufferBuilderTestUtils.validateBufferWithAscendingInts(b, numIntsInBuffer, nextValue);
+//			}
+//			nextValue += numIntsInBuffer;
+//			numBuffers++;
+//
+//			b.recycleBuffer();
 		}
 
 		assertEquals(numBuffersExpected, numBuffers);

@@ -419,43 +419,43 @@ public interface NettyMessage {
 		}
 	}
 
-	class BatchFileRegion extends DefaultFileRegion implements NettyMessage {
+	class FileRegionMessage extends DefaultFileRegion implements NettyMessage {
 
 		static final byte ID = BufferResponse.ID;
 
 		// receiver ID (16), sequence number (4), backlog (4), dataType (1), isCompressed (1), buffer size (4)
 		static final int MESSAGE_HEADER_LENGTH = 16 + 4 + 4 + 1 + 1 + 4;
 
-		final InputChannelID receiverId;
-
-		final int sequenceNumber;
-
-		final int backlog;
+		final int bufferSize;
 
 		final Buffer.DataType dataType;
 
 		final boolean isCompressed;
 
-		final int bufferSize;
+		final int backlog;
 
-		public BatchFileRegion(
+		final int sequenceNumber;
+
+		final InputChannelID receiverId;
+
+		public FileRegionMessage(
 			FileChannel file,
 			long fileSize,
+			long position,
+			int bufferSize,
 			Buffer.DataType dataType,
 			boolean isCompressed,
-			int sequenceNumber,
-			InputChannelID receiverId,
 			int backlog,
-			long position,
-			int bufferSize) {
+			int sequenceNumber,
+			InputChannelID receiverId) {
 
 			super(file, position, fileSize);
+			this.bufferSize = bufferSize;
 			this.dataType = dataType;
 			this.isCompressed = isCompressed;
+			this.backlog = backlog;
 			this.sequenceNumber = sequenceNumber;
 			this.receiverId = checkNotNull(receiverId);
-			this.backlog = backlog;
-			this.bufferSize = bufferSize;
 		}
 
 		boolean isBuffer() {

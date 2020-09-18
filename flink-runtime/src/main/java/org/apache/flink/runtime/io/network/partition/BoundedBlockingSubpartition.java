@@ -264,9 +264,9 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 	 * Data is eagerly spilled (written to disk) and readers directly read from the file.
 	 */
 	public static BoundedBlockingSubpartition createWithFileChannel(
-			int index, ResultPartition parent, File tempFile, int readBufferSize) throws IOException {
+			int index, ResultPartition parent, File tempFile) throws IOException {
 
-		final FileChannelBoundedData bd = FileChannelBoundedData.create(tempFile.toPath(), readBufferSize);
+		final FileChannelBoundedData bd = FileChannelBoundedData.create(tempFile.toPath());
 		return new BoundedBlockingSubpartition(index, parent, bd);
 	}
 

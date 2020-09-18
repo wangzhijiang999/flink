@@ -202,7 +202,7 @@ public class PartitionRequestQueueTest {
 	}
 
 	private static class DefaultBufferResultSubpartitionView extends NoOpResultSubpartitionView {
-		/** Number of buffer in the backlog to report with every {@link #getNextBuffer()} call. */
+		/** Number of buffer in the backlog to report with every {@link #getNextRawMessage()} call. */
 		private final AtomicInteger buffersInBacklog;
 
 		private DefaultBufferResultSubpartitionView(int buffersInBacklog) {
@@ -211,13 +211,13 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public BufferAndBacklog getNextBuffer() {
+		public RawMessage getNextRawMessage() {
 			int buffers = buffersInBacklog.decrementAndGet();
-			return new BufferAndBacklog(
+			return new RawBufferMessage(
 				TestBufferFactory.createBuffer(10),
 				buffers > 0,
-				buffers,
-				false);
+				false,
+				buffers);
 		}
 
 		@Override
@@ -237,13 +237,8 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public BufferAndBacklog getNextBuffer() {
-			BufferAndBacklog nextBuffer = super.getNextBuffer();
-			return new BufferAndBacklog(
-				nextBuffer.buffer().readOnlySlice(),
-				nextBuffer.isDataAvailable(),
-				nextBuffer.buffersInBacklog(),
-				nextBuffer.isEventAvailable());
+		public RawMessage getNextRawMessage() {
+			return super.getNextRawMessage();
 		}
 	}
 

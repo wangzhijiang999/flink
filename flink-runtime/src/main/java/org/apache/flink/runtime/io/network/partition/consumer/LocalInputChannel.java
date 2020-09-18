@@ -200,7 +200,7 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 			subpartitionView = checkAndWaitForSubpartitionView();
 		}
 
-		BufferAndBacklog next = subpartitionView.getNextBuffer();
+		ResultSubpartitionView.RawMessage next = subpartitionView.getNextRawMessage();
 
 		if (next == null) {
 			if (subpartitionView.isReleased()) {
@@ -209,8 +209,13 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 				return Optional.empty();
 			}
 		}
+		Buffer buffer;
+		if (next instanceof ResultSubpartitionView.RawBufferMessage) {
+			buffer = ((ResultSubpartitionView.RawBufferMessage) next).buffer();
+		} else {
+			throw new IOException("");
+		}
 
-		Buffer buffer = next.buffer();
 		CheckpointBarrier notifyReceivedBarrier = parseCheckpointBarrierOrNull(buffer);
 		if (notifyReceivedBarrier != null) {
 			receivedCheckpointId = notifyReceivedBarrier.getId();
