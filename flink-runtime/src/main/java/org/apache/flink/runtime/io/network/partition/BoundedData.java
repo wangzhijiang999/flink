@@ -105,7 +105,7 @@ interface BoundedData extends Closeable {
 		private final Buffer.DataType type;
 		private final boolean isCompressed;
 
-		FileRegionData(FileChannel channel, long position,  int size, Buffer.DataType type, boolean isCompressed) {
+		FileRegionData(FileChannel channel, long position, int size, Buffer.DataType type, boolean isCompressed) {
 			this.channel = channel;
 			this.position = position;
 			this.size = size;

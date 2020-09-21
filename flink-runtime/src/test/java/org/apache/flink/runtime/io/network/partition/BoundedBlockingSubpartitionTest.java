@@ -85,7 +85,7 @@ public class BoundedBlockingSubpartitionTest extends SubpartitionTestBase {
 		final TestingBoundedDataReader reader = new TestingBoundedDataReader();
 		final TestingBoundedData data = new TestingBoundedData(reader);
 		final BoundedBlockingSubpartitionReader bbspr = new BoundedBlockingSubpartitionReader(
-				(BoundedBlockingSubpartition) createSubpartition(), data, 10, new NoOpBufferAvailablityListener());
+				(BoundedBlockingSubpartition) createSubpartition(), data, 10, 10);
 
 		bbspr.releaseAllResources();
 

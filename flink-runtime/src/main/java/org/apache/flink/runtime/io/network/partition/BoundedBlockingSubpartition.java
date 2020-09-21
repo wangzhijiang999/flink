@@ -207,7 +207,7 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 			availability.notifyDataAvailable();
 
 			final BoundedBlockingSubpartitionReader reader = new BoundedBlockingSubpartitionReader(
-					this, data, numDataBuffersWritten, availability);
+					this, data, numDataBuffersWritten, numBuffersAndEventsWritten);
 			readers.add(reader);
 			return reader;
 		}

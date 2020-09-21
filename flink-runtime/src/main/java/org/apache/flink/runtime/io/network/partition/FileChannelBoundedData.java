@@ -103,7 +103,7 @@ final class FileChannelBoundedData implements BoundedData {
 
 		private long position;
 
-		private int lastSize;
+		private int dataSize;
 
 		FileBufferReader(FileChannel fileChannel) throws IOException {
 			this.fileChannel = checkNotNull(fileChannel);
@@ -115,7 +115,7 @@ final class FileChannelBoundedData implements BoundedData {
 		@Override
 		public FileRegionData nextData() throws IOException {
 			if (position != 0) {
-				position += lastSize;
+				position += dataSize;
 			}
 			if (position >= fileSize) {
 				return null;
@@ -129,11 +129,11 @@ final class FileChannelBoundedData implements BoundedData {
 
 			position += BufferReaderWriterUtil.HEADER_LENGTH;
 			boolean isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
-			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
-			lastSize = headerBuffer.getInt();
 			Buffer.DataType dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
+			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
+			dataSize = headerBuffer.getInt();
 
-			return new FileRegionData(fileChannel, position, lastSize, dataType, isCompressed);
+			return new FileRegionData(fileChannel, position, dataSize, dataType, isCompressed);
 		}
 
 		@Override

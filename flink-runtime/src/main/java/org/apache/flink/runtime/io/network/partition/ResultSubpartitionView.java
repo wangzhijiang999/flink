@@ -88,9 +88,7 @@ public interface ResultSubpartitionView {
 			return moreAvailable;
 		}
 
-		public boolean isBuffer() {
-			return true;
-		}
+		public abstract boolean isBuffer();
 
 		public boolean isDataAvailable() {
 			return isDataAvailable;
@@ -185,6 +183,11 @@ public interface ResultSubpartitionView {
 
 		public boolean isCompressed() {
 			return isCompressed;
+		}
+
+		@Override
+		public boolean isBuffer() {
+			return dataType == Buffer.DataType.DATA_BUFFER;
 		}
 
 		public int size() {

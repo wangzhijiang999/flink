@@ -31,7 +31,6 @@ import org.apache.flink.runtime.util.EnvironmentInformation;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
@@ -118,7 +117,7 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 		subpartition.release();
 	}
 
-	@Ignore
+	@Test
 	public void testRead10ConsumersSequential() throws Exception {
 		final int numLongs = 10_000_000;
 
@@ -136,7 +135,7 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 		subpartition.release();
 	}
 
-	@Ignore
+	@Test
 	public void testRead10ConsumersConcurrent() throws Exception {
 		final int numLongs = 15_000_000;
 
@@ -185,8 +184,7 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 				uncompressedBuffer.recycleBuffer();
 			}
 			while (buffer.hasRemaining()) {
-				//assertEquals(expectedNextLong++, buffer.getLong());
-				System.out.println(buffer.getLong());
+				assertEquals(expectedNextLong++, buffer.getLong());
 			}
 
 			buf.recycleBuffer();
