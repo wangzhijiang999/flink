@@ -61,7 +61,7 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 	@ClassRule
 	public static final TemporaryFolder TMP_FOLDER = new TemporaryFolder();
 
-	private static final int BUFFER_SIZE = 1024 * 1024;
+	private static final int BUFFER_SIZE = 32 * 1024 * 1024;
 
 	private static final String COMPRESSION_CODEC = "LZ4";
 
