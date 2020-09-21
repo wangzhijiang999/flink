@@ -38,6 +38,6 @@ public class FreeingBufferRecycler implements BufferRecycler {
 	 */
 	@Override
 	public void recycle(MemorySegment memorySegment) {
-		memorySegment.free();
+		//memorySegment.free();
 	}
 }

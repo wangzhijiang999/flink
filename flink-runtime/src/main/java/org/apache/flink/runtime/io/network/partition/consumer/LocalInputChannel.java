@@ -79,7 +79,7 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 	/** The current received checkpoint id from the network. */
 	private long receivedCheckpointId = -1;
 
-	private final MemorySegment memorySegment = MemorySegmentFactory.allocateUnpooledSegment(1024 * 32);
+	private final MemorySegment memorySegment = MemorySegmentFactory.allocateUnpooledSegment(1024 * 2024 * 32);
 
 	public LocalInputChannel(
 		SingleInputGate inputGate,
@@ -217,22 +217,7 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 				return Optional.empty();
 			}
 		}
-		Buffer buffer;
-		if (next instanceof ResultSubpartitionView.RawBufferMessage) {
-			buffer = ((ResultSubpartitionView.RawBufferMessage) next).buffer();
-		} else if (next instanceof ResultSubpartitionView.RawFileRegion) {
-
-			ResultSubpartitionView.RawFileRegion fileRegion = (ResultSubpartitionView.RawFileRegion) next;
-
-			ByteBuffer targetBuf = memorySegment.wrap(0, fileRegion.size());
-
-			BufferReaderWriterUtil.readByteBufferFully(fileRegion.channel(), targetBuf);
-
-			buffer = new NetworkBuffer(memorySegment, this, fileRegion.dataType(), fileRegion.isCompressed(), fileRegion.size());
-		} else {
-			throw new IOException("");
-		}
-
+		Buffer buffer = next.getBuffer(memorySegment);
 
 		CheckpointBarrier notifyReceivedBarrier = parseCheckpointBarrierOrNull(buffer);
 		if (notifyReceivedBarrier != null) {

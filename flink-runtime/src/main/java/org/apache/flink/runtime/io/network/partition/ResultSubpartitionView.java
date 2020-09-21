@@ -102,7 +102,7 @@ public interface ResultSubpartitionView {
 			return buffersInBacklog;
 		}
 
-		abstract Buffer getBuffer(MemorySegment segment) throws IOException;
+		public abstract Buffer getBuffer(MemorySegment segment) throws IOException;
 
 		public abstract NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
 	}
