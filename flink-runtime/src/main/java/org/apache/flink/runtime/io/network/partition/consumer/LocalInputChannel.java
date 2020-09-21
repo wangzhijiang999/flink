@@ -19,6 +19,8 @@
 package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.core.memory.MemorySegment;
+import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.checkpoint.channel.ChannelStateWriter;
 import org.apache.flink.runtime.event.TaskEvent;
@@ -27,17 +29,21 @@ import org.apache.flink.runtime.io.network.TaskEventPublisher;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
+import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
+import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 import org.apache.flink.runtime.io.network.partition.BufferAvailabilityListener;
 import org.apache.flink.runtime.io.network.partition.PartitionNotFoundException;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
+import org.apache.flink.runtime.io.network.partition.BufferReaderWriterUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -48,7 +54,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 /**
  * An input channel, which requests a local subpartition.
  */
-public class LocalInputChannel extends InputChannel implements BufferAvailabilityListener {
+public class LocalInputChannel extends InputChannel implements BufferAvailabilityListener, BufferRecycler {
 
 	private static final Logger LOG = LoggerFactory.getLogger(LocalInputChannel.class);
 
@@ -72,6 +78,8 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 
 	/** The current received checkpoint id from the network. */
 	private long receivedCheckpointId = -1;
+
+	private final MemorySegment memorySegment = MemorySegmentFactory.allocateUnpooledSegment(1024 * 32);
 
 	public LocalInputChannel(
 		SingleInputGate inputGate,
@@ -212,9 +220,19 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 		Buffer buffer;
 		if (next instanceof ResultSubpartitionView.RawBufferMessage) {
 			buffer = ((ResultSubpartitionView.RawBufferMessage) next).buffer();
+		} else if (next instanceof ResultSubpartitionView.RawFileRegion) {
+
+			ResultSubpartitionView.RawFileRegion fileRegion = (ResultSubpartitionView.RawFileRegion) next;
+
+			ByteBuffer targetBuf = memorySegment.wrap(0, fileRegion.size());
+
+			BufferReaderWriterUtil.readByteBufferFully(fileRegion.channel(), targetBuf);
+
+			buffer = new NetworkBuffer(memorySegment, this, fileRegion.dataType(), fileRegion.isCompressed(), fileRegion.size());
 		} else {
 			throw new IOException("");
 		}
+
 
 		CheckpointBarrier notifyReceivedBarrier = parseCheckpointBarrierOrNull(buffer);
 		if (notifyReceivedBarrier != null) {
@@ -276,6 +294,10 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 	@Override
 	boolean isReleased() {
 		return isReleased;
+	}
+
+	@Override
+	public void recycle(MemorySegment memorySegment) {
 	}
 
 	/**

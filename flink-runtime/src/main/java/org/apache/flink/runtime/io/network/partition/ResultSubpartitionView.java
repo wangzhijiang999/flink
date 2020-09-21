@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import com.sun.jna.Memory;
+import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.netty.NettyMessage;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
@@ -98,6 +100,8 @@ public interface ResultSubpartitionView {
 			return buffersInBacklog;
 		}
 
+		abstract Buffer getBuffer(MemorySegment segment);
+
 		public abstract NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
 	}
 
@@ -128,6 +132,10 @@ public interface ResultSubpartitionView {
 		}
 
 		public Buffer buffer() {
+			return buffer;
+		}
+
+		public Buffer getBuffer(MemorySegment segment) {
 			return buffer;
 		}
 	}
@@ -169,6 +177,26 @@ public interface ResultSubpartitionView {
 				buffersInBacklog,
 				sequenceNumber,
 				id);
+		}
+
+		public boolean isCompressed() {
+			return isCompressed;
+		}
+
+		public int size() {
+			return size;
+		}
+
+		public Buffer.DataType dataType() {
+			return dataType;
+		}
+
+		public FileChannel channel() {
+			return fileChannel;
+		}
+
+		public Buffer getBuffer(MemorySegment segment) {
+			
 		}
 	}
 }

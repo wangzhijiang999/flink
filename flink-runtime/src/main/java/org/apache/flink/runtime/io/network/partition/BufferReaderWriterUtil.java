@@ -38,7 +38,7 @@ import java.nio.channels.FileChannel;
  * <p>The encoding is the same across FileChannel and ByteBuffer, so this class can
  * write to a file and read from the byte buffer that results from mapping this file to memory.
  */
-final class BufferReaderWriterUtil {
+public class BufferReaderWriterUtil {
 
 	static final int HEADER_LENGTH = 8;
 
@@ -162,7 +162,7 @@ final class BufferReaderWriterUtil {
 		}
 	}
 
-	private static void readByteBufferFully(FileChannel channel, ByteBuffer b) throws IOException {
+	public static void readByteBufferFully(FileChannel channel, ByteBuffer b) throws IOException {
 		// the post-checked loop here gets away with one less check in the normal case
 		do {
 			if (channel.read(b) == -1) {

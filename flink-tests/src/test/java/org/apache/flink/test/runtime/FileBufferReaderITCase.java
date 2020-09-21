@@ -90,7 +90,7 @@ public class FileBufferReaderITCase extends TestLogger {
 
 		final MiniClusterConfiguration miniClusterConfiguration = new MiniClusterConfiguration.Builder()
 			.setConfiguration(configuration)
-			.setNumTaskManagers(parallelism * 2)
+			.setNumTaskManagers(parallelism)
 			.setNumSlotsPerTaskManager(1)
 			.build();
 

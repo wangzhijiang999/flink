@@ -27,6 +27,7 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.shaded.netty4.io.netty.channel.DefaultFileRegion;
+import org.apache.flink.shaded.netty4.io.netty.util.IllegalReferenceCountException;
 import org.apache.flink.util.ExceptionUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
@@ -48,6 +49,7 @@ import java.io.ObjectOutputStream;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -421,10 +423,12 @@ public interface NettyMessage {
 
 	class FileRegionMessage extends DefaultFileRegion implements NettyMessage {
 
+		/** Use the same id with BufferResponse to reuse the BufferResponseDecoder on downstream side */
 		static final byte ID = BufferResponse.ID;
 
-		// receiver ID (16), sequence number (4), backlog (4), dataType (1), isCompressed (1), buffer size (4)
-		static final int MESSAGE_HEADER_LENGTH = 16 + 4 + 4 + 1 + 1 + 4;
+		final FileChannel file;
+
+		final long curPosition;
 
 		final int bufferSize;
 
@@ -450,6 +454,9 @@ public interface NettyMessage {
 			InputChannelID receiverId) {
 
 			super(file, position, fileSize);
+
+			this.file = file;
+			this.curPosition = position;
 			this.bufferSize = bufferSize;
 			this.dataType = dataType;
 			this.isCompressed = isCompressed;
@@ -471,7 +478,7 @@ public interface NettyMessage {
 			ByteBuf headerBuf = null;
 			try {
 				// only allocate header buffer - we will combine it with the data buffer below
-				headerBuf = allocateBuffer(allocator, ID, MESSAGE_HEADER_LENGTH, bufferSize, false);
+				headerBuf = allocateBuffer(allocator, ID, BufferResponse.MESSAGE_HEADER_LENGTH, bufferSize, false);
 
 				receiverId.writeTo(headerBuf);
 				headerBuf.writeInt(sequenceNumber);
@@ -491,45 +498,15 @@ public interface NettyMessage {
 			}
 		}
 
-		/**
-		 * Parses the message header part and composes a new BufferResponse with an empty data buffer. The
-		 * data buffer will be filled in later.
-		 *
-		 * @param messageHeader the serialized message header.
-		 * @param bufferAllocator the allocator for network buffer.
-		 * @return a BufferResponse object with the header parsed and the data buffer to fill in later. The
-		 *			data buffer will be null if the target channel has been released or the buffer size is 0.
-		 */
-		static BufferResponse readFrom(ByteBuf messageHeader, NetworkBufferAllocator bufferAllocator) {
-			InputChannelID receiverId = InputChannelID.fromByteBuf(messageHeader);
-			int sequenceNumber = messageHeader.readInt();
-			int backlog = messageHeader.readInt();
-			Buffer.DataType dataType = Buffer.DataType.values()[messageHeader.readByte()];
-			boolean isCompressed = messageHeader.readBoolean();
-			int size = messageHeader.readInt();
-
-			Buffer dataBuffer = null;
-
-			if (size != 0) {
-				if (dataType.isBuffer()) {
-					dataBuffer = bufferAllocator.allocatePooledNetworkBuffer(receiverId);
-				} else {
-					dataBuffer = bufferAllocator.allocateUnPooledNetworkBuffer(size, dataType);
-				}
+		@Override
+		public long transferTo(WritableByteChannel target, long position) throws IOException {
+			if (refCnt() == 0) {
+				throw new IllegalReferenceCountException(0);
 			}
 
-			if (dataBuffer != null) {
-				dataBuffer.setCompressed(isCompressed);
-			}
-
-			return new BufferResponse(
-				dataBuffer,
-				dataType,
-				isCompressed,
-				sequenceNumber,
-				receiverId,
-				backlog,
-				size);
+			long written = file.transferTo(curPosition, bufferSize, target);
+			assert written > 0;
+			return written;
 		}
 	}
 
