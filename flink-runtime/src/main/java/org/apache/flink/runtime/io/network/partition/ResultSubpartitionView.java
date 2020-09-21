@@ -21,6 +21,8 @@ package org.apache.flink.runtime.io.network.partition;
 import com.sun.jna.Memory;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.buffer.FreeingBufferRecycler;
+import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 import org.apache.flink.runtime.io.network.netty.NettyMessage;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
@@ -28,6 +30,8 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
 /**
@@ -100,7 +104,7 @@ public interface ResultSubpartitionView {
 			return buffersInBacklog;
 		}
 
-		abstract Buffer getBuffer(MemorySegment segment);
+		abstract Buffer getBuffer(MemorySegment segment) throws IOException;
 
 		public abstract NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
 	}
@@ -195,8 +199,19 @@ public interface ResultSubpartitionView {
 			return fileChannel;
 		}
 
-		public Buffer getBuffer(MemorySegment segment) {
-			
+		public Buffer getBuffer(MemorySegment segment) throws IOException {
+			final ByteBuffer targetBuf;
+			try {
+				targetBuf = segment.wrap(0, size);
+			}
+			catch (BufferUnderflowException | IllegalArgumentException e) {
+				// buffer underflow if header buffer is undersized
+				// IllegalArgumentException if size is outside memory segment size
+				throw new IOException("The spill file is corrupt: buffer size and boundaries invalid");
+			}
+
+			BufferReaderWriterUtil.readByteBufferFully(fileChannel, targetBuf);
+			return new NetworkBuffer(segment, FreeingBufferRecycler.INSTANCE, dataType, isCompressed, size);
 		}
 	}
 }
