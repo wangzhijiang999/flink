@@ -228,7 +228,6 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 
 		numBytesIn.inc(buffer.getSize());
 		numBuffersIn.inc();
-		System.out.println("get next from local :" + buffer.isBuffer());
 		return Optional.of(new BufferAndAvailability(buffer, next.isDataAvailable(), next.buffersInBacklog()));
 	}
 

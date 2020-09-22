@@ -568,8 +568,8 @@ public interface NettyMessage {
 			}
 
 			long transferred = file.transferTo(position, bufferSize, target);
-			System.out.println("position:" + position + ", send size : " + bufferSize + ", total len:" + file.size());
 			assert transferred > 0;
+			//System.out.println("send size:" + bufferSize + ", with position:" + position + ",fize size:" + file.size());
 			return transferred;
 		}
 

@@ -140,7 +140,7 @@ final class FileChannelBoundedData implements BoundedData {
 			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
 			dataSize = headerBuffer.getInt();
 
-			System.out.println("current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
+			System.out.println("isEvent:" + isEvent + ",current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
 
 			return new FileRegionData(fileChannel, position, dataSize, dataType, isCompressed);
 		}
