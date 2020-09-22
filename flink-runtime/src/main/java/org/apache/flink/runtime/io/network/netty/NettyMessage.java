@@ -27,6 +27,8 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.shaded.netty4.io.netty.channel.DefaultFileRegion;
+import org.apache.flink.shaded.netty4.io.netty.channel.FileRegion;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.MessageToByteEncoder;
 import org.apache.flink.shaded.netty4.io.netty.util.IllegalReferenceCountException;
 import org.apache.flink.util.ExceptionUtils;
 
@@ -169,30 +171,91 @@ public interface NettyMessage {
 	// ------------------------------------------------------------------------
 
 	@ChannelHandler.Sharable
-	class NettyMessageEncoder extends ChannelOutboundHandlerAdapter {
+	class NettyMessageEncoder extends MessageToByteEncoder<NettyMessage> {
 
 		@Override
-		public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-			if (msg instanceof NettyMessage) {
+		protected void encode(ChannelHandlerContext ctx, NettyMessage msg, final ByteBuf out) throws Exception {
+			ByteBuf serialized = null;
 
-				ByteBuf serialized = null;
-
-				try {
-					serialized = ((NettyMessage) msg).write(ctx.alloc());
-				}
-				catch (Throwable t) {
-					throw new IOException("Error while serializing message: " + msg, t);
-				}
-				finally {
-					if (serialized != null) {
-						ctx.write(serialized, promise);
-					}
-				}
+			try {
+				serialized = msg.write(ctx.alloc());
 			}
-			else {
-				ctx.write(msg, promise);
+			catch (Throwable t) {
+				throw new IOException("Error while serializing message: " + msg, t);
+			}
+			finally {
+				if (serialized != null) {
+					ctx.write(serialized);
+				}
+
+				if (msg instanceof FileRegion) {
+					WritableByteChannel writableByteChannel = new WritableByteChannel() {
+						@Override
+						public int write(ByteBuffer src) throws IOException {
+							out.writeBytes(src);
+							return src.capacity();
+						}
+
+						@Override
+						public boolean isOpen() {
+							return true;
+						}
+
+						@Override
+						public void close() throws IOException {
+						}
+
+					};
+
+					((FileRegion) msg).transferTo(writableByteChannel, ((FileRegion) msg).position());
+				}
 			}
 		}
+
+//		@Override
+//		public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+//			if (msg instanceof NettyMessage) {
+//
+//				ByteBuf serialized = null;
+//
+//				try {
+//					serialized = ((NettyMessage) msg).write(ctx.alloc());
+//				}
+//				catch (Throwable t) {
+//					throw new IOException("Error while serializing message: " + msg, t);
+//				}
+//				finally {
+//					if (serialized != null) {
+//						ctx.write(serialized, promise);
+//					}
+//
+//					if (msg instanceof FileRegion) {
+//						WritableByteChannel writableByteChannel = new WritableByteChannel() {
+//							@Override
+//							public int write(ByteBuffer src) throws IOException {
+//								ctx.write(src, promise);
+//								return src.capacity();
+//							}
+//
+//							@Override
+//							public boolean isOpen() {
+//								return true;
+//							}
+//
+//							@Override
+//							public void close() throws IOException {
+//							}
+//
+//						};
+//
+//						//((FileRegion) msg).transferTo(ctx.channel(), ((FileRegion) msg).position());
+//					}
+//				}
+//			}
+//			else {
+//				ctx.write(msg, promise);
+//			}
+//		}
 	}
 
 	/**
@@ -504,9 +567,18 @@ public interface NettyMessage {
 				throw new IllegalReferenceCountException(0);
 			}
 
-			long written = file.transferTo(curPosition, bufferSize, target);
-			assert written > 0;
-			return written;
+			long transferred = file.transferTo(position, bufferSize, target);
+			System.out.println("position:" + position + ", send size : " + bufferSize + ", total len:" + file.size());
+			assert transferred > 0;
+			return transferred;
+		}
+
+		public void close() {
+			this.deallocate();
+		}
+
+		@Override
+		protected void deallocate() {
 		}
 	}
 

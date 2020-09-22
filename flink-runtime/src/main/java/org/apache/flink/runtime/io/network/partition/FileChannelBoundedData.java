@@ -19,7 +19,10 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 import org.apache.flink.util.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -38,6 +41,8 @@ import static org.apache.flink.util.Preconditions.checkState;
  * The readers are simple file channel readers using a simple dedicated buffer pool.
  */
 final class FileChannelBoundedData implements BoundedData {
+
+	private static final Logger LOG = LoggerFactory.getLogger(FileChannelBoundedData.class);
 
 	private final Path filePath;
 
@@ -121,6 +126,8 @@ final class FileChannelBoundedData implements BoundedData {
 				return null;
 			}
 
+			checkState(fileChannel.isOpen());
+
 			headerBuffer.clear();
 			if (!BufferReaderWriterUtil.tryReadByteBuffer(fileChannel, headerBuffer)) {
 				return null;
@@ -132,6 +139,8 @@ final class FileChannelBoundedData implements BoundedData {
 			Buffer.DataType dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
 			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
 			dataSize = headerBuffer.getInt();
+
+			System.out.println("current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
 
 			return new FileRegionData(fileChannel, position, dataSize, dataType, isCompressed);
 		}
