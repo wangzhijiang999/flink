@@ -119,7 +119,7 @@ final class FileChannelBoundedData implements BoundedData {
 			this.fileChannel = checkNotNull(fileChannel);
 			this.fileSize = fileChannel.size();
 			this.headerBuffer = BufferReaderWriterUtil.allocatedHeaderBuffer();
-			this.nettyHeaderBuffer = BufferReaderWriterUtil.allocatedHeaderBuffer(totalHeaderLen);
+			this.nettyHeaderBuffer = ByteBuffer.allocateDirect(totalHeaderLen);
 		}
 
 		@Nullable
@@ -147,8 +147,10 @@ final class FileChannelBoundedData implements BoundedData {
 			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
 			dataSize = headerBuffer.getInt();
 
-			nettyHeaderBuffer.putInt(totalHeaderLen + dataSize); // may be updated later, e.g. if contentLength == -1
+			nettyHeaderBuffer.clear();
+			nettyHeaderBuffer.putInt(totalHeaderLen + dataSize);
 			nettyHeaderBuffer.putInt(NettyMessage.MAGIC_NUMBER);
+			nettyHeaderBuffer.put(NettyMessage.FileRegionMessage.ID);
 
 			//System.out.println("isEvent:" + isEvent + ",current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
 

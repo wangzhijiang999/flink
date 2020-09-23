@@ -428,7 +428,7 @@ public interface NettyMessage {
 	class FileRegionMessage extends DefaultFileRegion implements NettyMessage {
 
 		/** Use the same id with BufferResponse to reuse the BufferResponseDecoder on downstream side */
-		static final byte ID = BufferResponse.ID;
+		public static final byte ID = BufferResponse.ID;
 
 		final FileChannel file;
 
@@ -496,6 +496,9 @@ public interface NettyMessage {
 				headerTransferred += curTransferred;
 			} else {
 				curTransferred = file.transferTo(filePos + fileTransferred, length - fileTransferred, target);
+				//System.out.println("before:" + file.position() + ", transferred:" + curTransferred);
+				file.position(file.position() + curTransferred);
+				//System.out.println("after:" + file.position());
 				fileTransferred += curTransferred;
 			}
 			return curTransferred;

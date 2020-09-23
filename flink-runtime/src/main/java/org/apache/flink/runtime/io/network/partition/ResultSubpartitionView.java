@@ -178,6 +178,7 @@ public interface ResultSubpartitionView {
 			header.put((byte) dataType.ordinal());
 			header.put((byte) (isCompressed ? 1 : 0));
 			header.putInt(size);
+			header.flip();
 			return new NettyMessage.FileRegionMessage(
 				fileChannel,
 				position,
