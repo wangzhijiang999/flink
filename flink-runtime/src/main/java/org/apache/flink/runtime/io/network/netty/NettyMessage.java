@@ -29,6 +29,7 @@ import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.shaded.netty4.io.netty.channel.DefaultFileRegion;
 import org.apache.flink.shaded.netty4.io.netty.channel.FileRegion;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.MessageToByteEncoder;
+import org.apache.flink.shaded.netty4.io.netty.util.AbstractReferenceCounted;
 import org.apache.flink.shaded.netty4.io.netty.util.IllegalReferenceCountException;
 import org.apache.flink.util.ExceptionUtils;
 
@@ -52,6 +53,7 @@ import java.net.ProtocolException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
+import java.util.List;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -171,91 +173,30 @@ public interface NettyMessage {
 	// ------------------------------------------------------------------------
 
 	@ChannelHandler.Sharable
-	class NettyMessageEncoder extends MessageToByteEncoder<NettyMessage> {
+	class NettyMessageEncoder extends ChannelOutboundHandlerAdapter {
 
 		@Override
-		protected void encode(ChannelHandlerContext ctx, NettyMessage msg, final ByteBuf out) throws Exception {
-			ByteBuf serialized = null;
+		public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+			if (msg instanceof NettyMessage) {
 
-			try {
-				serialized = msg.write(ctx.alloc());
-			}
-			catch (Throwable t) {
-				throw new IOException("Error while serializing message: " + msg, t);
-			}
-			finally {
-				if (serialized != null) {
-					ctx.write(serialized);
+				ByteBuf serialized = null;
+
+				try {
+					serialized = ((NettyMessage) msg).write(ctx.alloc());
 				}
-
-				if (msg instanceof FileRegion) {
-					WritableByteChannel writableByteChannel = new WritableByteChannel() {
-						@Override
-						public int write(ByteBuffer src) throws IOException {
-							out.writeBytes(src);
-							return src.capacity();
-						}
-
-						@Override
-						public boolean isOpen() {
-							return true;
-						}
-
-						@Override
-						public void close() throws IOException {
-						}
-
-					};
-
-					((FileRegion) msg).transferTo(writableByteChannel, ((FileRegion) msg).position());
+				catch (Throwable t) {
+					throw new IOException("Error while serializing message: " + msg, t);
 				}
+				finally {
+					if (serialized != null) {
+						ctx.write(serialized, promise);
+					}
+				}
+			}
+			else {
+				ctx.write(msg, promise);
 			}
 		}
-
-//		@Override
-//		public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-//			if (msg instanceof NettyMessage) {
-//
-//				ByteBuf serialized = null;
-//
-//				try {
-//					serialized = ((NettyMessage) msg).write(ctx.alloc());
-//				}
-//				catch (Throwable t) {
-//					throw new IOException("Error while serializing message: " + msg, t);
-//				}
-//				finally {
-//					if (serialized != null) {
-//						ctx.write(serialized, promise);
-//					}
-//
-//					if (msg instanceof FileRegion) {
-//						WritableByteChannel writableByteChannel = new WritableByteChannel() {
-//							@Override
-//							public int write(ByteBuffer src) throws IOException {
-//								ctx.write(src, promise);
-//								return src.capacity();
-//							}
-//
-//							@Override
-//							public boolean isOpen() {
-//								return true;
-//							}
-//
-//							@Override
-//							public void close() throws IOException {
-//							}
-//
-//						};
-//
-//						//((FileRegion) msg).transferTo(ctx.channel(), ((FileRegion) msg).position());
-//					}
-//				}
-//			}
-//			else {
-//				ctx.write(msg, promise);
-//			}
-//		}
 	}
 
 	/**
@@ -451,7 +392,7 @@ public interface NettyMessage {
 		 * @return a BufferResponse object with the header parsed and the data buffer to fill in later. The
 		 *			data buffer will be null if the target channel has been released or the buffer size is 0.
 		 */
-		static BufferResponse readFrom(ByteBuf messageHeader, NetworkBufferAllocator bufferAllocator) {
+		 static BufferResponse readFrom(ByteBuf messageHeader, NetworkBufferAllocator bufferAllocator) {
 			InputChannelID receiverId = InputChannelID.fromByteBuf(messageHeader);
 			int sequenceNumber = messageHeader.readInt();
 			int backlog = messageHeader.readInt();
@@ -491,45 +432,31 @@ public interface NettyMessage {
 
 		final FileChannel file;
 
-		final long curPosition;
+		final long filePos;
 
-		final int bufferSize;
+		final long headerPos;
 
-		final Buffer.DataType dataType;
+		final long length;
 
-		final boolean isCompressed;
+		final ByteBuffer headerBuf;
 
-		final int backlog;
+		private long fileTransferred;
 
-		final int sequenceNumber;
-
-		final InputChannelID receiverId;
+		private long headerTransferred;
 
 		public FileRegionMessage(
 			FileChannel file,
-			long fileSize,
-			long position,
-			int bufferSize,
-			Buffer.DataType dataType,
-			boolean isCompressed,
-			int backlog,
-			int sequenceNumber,
-			InputChannelID receiverId) {
+			long filePos,
+			long length,
+			ByteBuffer header) {
 
-			super(file, position, fileSize);
+			super(file, filePos, length);
 
 			this.file = file;
-			this.curPosition = position;
-			this.bufferSize = bufferSize;
-			this.dataType = dataType;
-			this.isCompressed = isCompressed;
-			this.backlog = backlog;
-			this.sequenceNumber = sequenceNumber;
-			this.receiverId = checkNotNull(receiverId);
-		}
-
-		boolean isBuffer() {
-			return dataType.isBuffer();
+			this.filePos = filePos;
+			this.length = length;
+			this.headerBuf = header;
+			this.headerPos = headerBuf.position();
 		}
 
 		// --------------------------------------------------------------------
@@ -538,43 +465,44 @@ public interface NettyMessage {
 
 		@Override
 		public ByteBuf write(ByteBufAllocator allocator) throws IOException {
-			ByteBuf headerBuf = null;
-			try {
-				// only allocate header buffer - we will combine it with the data buffer below
-				headerBuf = allocateBuffer(allocator, ID, BufferResponse.MESSAGE_HEADER_LENGTH, bufferSize, false);
+			return null;
+		}
 
-				receiverId.writeTo(headerBuf);
-				headerBuf.writeInt(sequenceNumber);
-				headerBuf.writeInt(backlog);
-				headerBuf.writeByte(dataType.ordinal());
-				headerBuf.writeBoolean(isCompressed);
-				headerBuf.writeInt(bufferSize);
-				return headerBuf;
-			}
-			catch (Throwable t) {
-				if (headerBuf != null) {
-					headerBuf.release();
-				}
+		@Override
+		public long position() {
+			return headerPos + filePos;
+		}
 
-				ExceptionUtils.rethrowIOException(t);
-				return null; // silence the compiler
-			}
+		@Override
+		public long transfered() {
+			return headerTransferred + fileTransferred;
+		}
+
+		@Override
+		public long transferred() {
+			return headerTransferred + fileTransferred;
+		}
+
+		@Override
+		public long count() {
+			return headerBuf.limit() + length;
 		}
 
 		@Override
 		public long transferTo(WritableByteChannel target, long position) throws IOException {
-			if (refCnt() == 0) {
-				throw new IllegalReferenceCountException(0);
+			long curTransferred;
+			if (headerBuf.hasRemaining()) {
+				curTransferred = target.write(headerBuf);
+				headerTransferred += curTransferred;
+			} else {
+				curTransferred = file.transferTo(filePos + fileTransferred, length - fileTransferred, target);
+				fileTransferred += curTransferred;
 			}
-
-			long transferred = file.transferTo(position, bufferSize, target);
-			assert transferred > 0;
-			//System.out.println("send size:" + bufferSize + ", with position:" + position + ",fize size:" + file.size());
-			return transferred;
+			return curTransferred;
 		}
 
 		public void close() {
-			this.deallocate();
+			deallocate();
 		}
 
 		@Override

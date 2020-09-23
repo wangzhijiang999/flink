@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.netty.NettyMessage;
 import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 import org.apache.flink.util.IOUtils;
 import org.slf4j.Logger;
@@ -41,8 +42,6 @@ import static org.apache.flink.util.Preconditions.checkState;
  * The readers are simple file channel readers using a simple dedicated buffer pool.
  */
 final class FileChannelBoundedData implements BoundedData {
-
-	private static final Logger LOG = LoggerFactory.getLogger(FileChannelBoundedData.class);
 
 	private final Path filePath;
 
@@ -100,9 +99,15 @@ final class FileChannelBoundedData implements BoundedData {
 
 	static final class FileBufferReader implements BoundedData.Reader {
 
+		private static final int MESSAGE_HEADER_LENGTH = 16 + 4 + 4 + 1 + 1 + 4;
+
+		private static final int totalHeaderLen = MESSAGE_HEADER_LENGTH + NettyMessage.FRAME_HEADER_LENGTH;
+
 		private final FileChannel fileChannel;
 
 		private final ByteBuffer headerBuffer;
+
+		private final ByteBuffer nettyHeaderBuffer;
 
 		private final long fileSize;
 
@@ -114,6 +119,7 @@ final class FileChannelBoundedData implements BoundedData {
 			this.fileChannel = checkNotNull(fileChannel);
 			this.fileSize = fileChannel.size();
 			this.headerBuffer = BufferReaderWriterUtil.allocatedHeaderBuffer();
+			this.nettyHeaderBuffer = BufferReaderWriterUtil.allocatedHeaderBuffer(totalHeaderLen);
 		}
 
 		@Nullable
@@ -135,14 +141,18 @@ final class FileChannelBoundedData implements BoundedData {
 			headerBuffer.flip();
 
 			position += BufferReaderWriterUtil.HEADER_LENGTH;
+
 			boolean isEvent = headerBuffer.getShort() == BufferReaderWriterUtil.HEADER_VALUE_IS_EVENT;
 			Buffer.DataType dataType = isEvent ? Buffer.DataType.EVENT_BUFFER : Buffer.DataType.DATA_BUFFER;
 			boolean isCompressed = headerBuffer.getShort() == BufferReaderWriterUtil.BUFFER_IS_COMPRESSED;
 			dataSize = headerBuffer.getInt();
 
-			System.out.println("isEvent:" + isEvent + ",current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
+			nettyHeaderBuffer.putInt(totalHeaderLen + dataSize); // may be updated later, e.g. if contentLength == -1
+			nettyHeaderBuffer.putInt(NettyMessage.MAGIC_NUMBER);
 
-			return new FileRegionData(fileChannel, position, dataSize, dataType, isCompressed);
+			//System.out.println("isEvent:" + isEvent + ",current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
+
+			return new FileRegionData(fileChannel, position, dataSize, dataType, isCompressed, nettyHeaderBuffer);
 		}
 
 		@Override

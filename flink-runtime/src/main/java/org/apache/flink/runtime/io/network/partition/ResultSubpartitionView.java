@@ -148,6 +148,7 @@ public interface ResultSubpartitionView {
 		private final int size;
 		private final Buffer.DataType dataType;
 		private final boolean isCompressed;
+		private final ByteBuffer header;
 
 		RawFileRegion(
 			FileChannel fileChannel,
@@ -157,7 +158,8 @@ public interface ResultSubpartitionView {
 			boolean isEventAvailable,
 			Buffer.DataType dataType,
 			boolean isCompressed,
-			int buffersInBacklog) {
+			int buffersInBacklog,
+			ByteBuffer header) {
 
 			super(isDataAvailable, isEventAvailable, buffersInBacklog);
 			this.fileChannel = fileChannel;
@@ -165,20 +167,22 @@ public interface ResultSubpartitionView {
 			this.size = size;
 			this.dataType = dataType;
 			this.isCompressed = isCompressed;
+			this.header = header;
 		}
 
 		@Override
 		public NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException {
+			id.writeTo(header);
+			header.putInt(sequenceNumber);
+			header.putInt(buffersInBacklog);
+			header.put((byte) dataType.ordinal());
+			header.put((byte) (isCompressed ? 1 : 0));
+			header.putInt(size);
 			return new NettyMessage.FileRegionMessage(
 				fileChannel,
-				fileChannel.size(),
 				position,
 				size,
-				dataType,
-				isCompressed,
-				buffersInBacklog,
-				sequenceNumber,
-				id);
+				header);
 		}
 
 		public boolean isCompressed() {

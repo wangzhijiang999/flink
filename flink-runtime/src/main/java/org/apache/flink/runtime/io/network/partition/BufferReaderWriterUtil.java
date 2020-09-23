@@ -139,7 +139,11 @@ public class BufferReaderWriterUtil {
 	}
 
 	static ByteBuffer allocatedHeaderBuffer() {
-		ByteBuffer bb = ByteBuffer.allocateDirect(HEADER_LENGTH);
+		return allocatedHeaderBuffer(HEADER_LENGTH);
+	}
+
+	static ByteBuffer allocatedHeaderBuffer(int len) {
+		ByteBuffer bb = ByteBuffer.allocateDirect(len);
 		configureByteBuffer(bb);
 		return bb;
 	}
@@ -149,6 +153,7 @@ public class BufferReaderWriterUtil {
 	}
 
 	static boolean tryReadByteBuffer(FileChannel channel, ByteBuffer b) throws IOException {
+		channel.read(b);
 		if (channel.read(b) == -1) {
 			return false;
 		}

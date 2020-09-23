@@ -24,6 +24,7 @@ import javax.annotation.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
 /**
@@ -104,13 +105,15 @@ interface BoundedData extends Closeable {
 		private final int size;
 		private final Buffer.DataType type;
 		private final boolean isCompressed;
+		private final ByteBuffer header;
 
-		FileRegionData(FileChannel channel, long position, int size, Buffer.DataType type, boolean isCompressed) {
+		FileRegionData(FileChannel channel, long position, int size, Buffer.DataType type, boolean isCompressed, ByteBuffer header) {
 			this.channel = channel;
 			this.position = position;
 			this.size = size;
 			this.type = type;
 			this.isCompressed = isCompressed;
+			this.header = header;
 		}
 
 		@Override
@@ -123,7 +126,6 @@ interface BoundedData extends Closeable {
 			boolean isDataAvailable,
 			boolean isEventAvailable,
 			int dataBufferBacklog) {
-
 			return new ResultSubpartitionView.RawFileRegion(
 				channel,
 				position,
@@ -132,7 +134,8 @@ interface BoundedData extends Closeable {
 				isEventAvailable,
 				type,
 				isCompressed,
-				dataBufferBacklog);
+				dataBufferBacklog,
+				header);
 		}
 	}
 

@@ -81,7 +81,7 @@ public class NettyProtocol {
 			queueOfPartitionQueues);
 
 		return new ChannelHandler[] {
-			messageEncoder,
+			//messageEncoder,
 			new NettyMessage.NettyMessageDecoder(),
 			serverHandler,
 			queueOfPartitionQueues

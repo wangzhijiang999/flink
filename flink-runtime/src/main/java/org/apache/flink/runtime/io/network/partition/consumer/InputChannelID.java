@@ -22,6 +22,8 @@ import org.apache.flink.util.AbstractID;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 
+import java.nio.ByteBuffer;
+
 /**
  * Identifier for input channels.
  */
@@ -44,6 +46,11 @@ public class InputChannelID extends AbstractID {
 	public void writeTo(ByteBuf buf) {
 		buf.writeLong(this.lowerPart);
 		buf.writeLong(this.upperPart);
+	}
+
+	public void writeTo(ByteBuffer buf) {
+		buf.putLong(this.lowerPart);
+		buf.putLong(this.upperPart);
 	}
 
 	public static InputChannelID fromByteBuf(ByteBuf buf) {
