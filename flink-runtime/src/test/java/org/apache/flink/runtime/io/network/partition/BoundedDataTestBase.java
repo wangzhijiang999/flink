@@ -196,7 +196,7 @@ public abstract class BoundedDataTestBase {
 	}
 
 	private static void readInts(BoundedData.Reader reader, int numBuffersExpected, int numInts) throws IOException {
-		BoundedData.RawData b;
+		BoundedData.BoundedPartitionData b;
 		int nextValue = 0;
 		int numBuffers = 0;
 

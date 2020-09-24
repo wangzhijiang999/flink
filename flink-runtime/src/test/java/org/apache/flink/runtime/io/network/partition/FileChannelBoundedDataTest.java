@@ -78,8 +78,8 @@ public class FileChannelBoundedDataTest extends BoundedDataTestBase {
 			writeBuffers(data, numberOfBuffers);
 
 			final BoundedData.Reader reader = data.createReader();
-			final BoundedData.RawData buffer1 = reader.nextData();
-			final BoundedData.RawData buffer2 = reader.nextData();
+			final BoundedData.BoundedPartitionData buffer1 = reader.nextData();
+			final BoundedData.BoundedPartitionData buffer2 = reader.nextData();
 
 			assertNotNull(buffer1);
 			assertNotNull(buffer2);
@@ -96,8 +96,8 @@ public class FileChannelBoundedDataTest extends BoundedDataTestBase {
 
 			final VerifyNotificationResultSubpartitionView subpartitionView = new VerifyNotificationResultSubpartitionView();
 			final BoundedData.Reader reader = data.createReader(subpartitionView);
-			final BoundedData.RawData buffer1 = reader.nextData();
-			final BoundedData.RawData buffer2 = reader.nextData();
+			final BoundedData.BoundedPartitionData buffer1 = reader.nextData();
+			final BoundedData.BoundedPartitionData buffer2 = reader.nextData();
 			assertNotNull(buffer1);
 			assertNotNull(buffer2);
 

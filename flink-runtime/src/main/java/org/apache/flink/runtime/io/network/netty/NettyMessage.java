@@ -435,11 +435,11 @@ public interface NettyMessage {
 
 		final FileChannel file;
 
+		final ByteBuffer headerBuffer;
+
 		final long pos;
 
 		final long count;
-
-		final ByteBuffer headerBuffer;
 
 		private long dataTransferred;
 

@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.util.IOUtils;
+import org.apache.flink.runtime.io.network.partition.BoundedData.BoundedPartitionData;
 
 import javax.annotation.Nullable;
 
@@ -74,7 +75,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 	public PartitionData getNextData() throws IOException {
 		assert dataReader != null;
 
-		BoundedData.RawData current = dataReader.nextData();
+		BoundedPartitionData current = dataReader.nextData();
 		if (current == null) {
 			return null;
 		}
@@ -84,7 +85,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 		}
 		numTotalBuffers--;
 
-		return current.buildRawMessage(
+		return current.build(
 			numTotalBuffers > 0,
 			false,
 			dataBufferBacklog);

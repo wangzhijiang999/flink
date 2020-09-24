@@ -30,6 +30,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
 /**
  * BoundedData is the data store in a single bounded blocking subpartition.
  *
@@ -88,35 +90,39 @@ interface BoundedData extends Closeable {
 	interface Reader extends Closeable {
 
 		@Nullable
-		RawData nextData() throws IOException;
+		BoundedPartitionData nextData() throws IOException;
 	}
 
-	interface RawData {
+	interface BoundedPartitionData {
 
 		boolean isBuffer();
 
-		PartitionData buildRawMessage(
-			boolean isDataAvailable,
-			boolean isEventAvailable,
-			int dataBufferBacklog);
+		PartitionData build(boolean isDataAvailable, boolean isEventAvailable, int dataBufferBacklog);
 	}
 
-	final class FileRegionData implements RawData {
+	final class BoundedPartitionFileRegion implements BoundedPartitionData {
 
 		private final FileChannel channel;
+		private final ByteBuffer headerBuffer;
 		private final long position;
-		private final int size;
+		private final int count;
 		private final Buffer.DataType type;
 		private final boolean isCompressed;
-		private final ByteBuffer header;
 
-		FileRegionData(FileChannel channel, long position, int size, Buffer.DataType type, boolean isCompressed, ByteBuffer header) {
-			this.channel = channel;
+		BoundedPartitionFileRegion(
+				FileChannel channel,
+				ByteBuffer headerBuffer,
+				long position,
+				int count,
+				Buffer.DataType type,
+				boolean isCompressed) {
+
+			this.channel = checkNotNull(channel);
+			this.headerBuffer = checkNotNull(headerBuffer);
 			this.position = position;
-			this.size = size;
+			this.count = count;
 			this.type = type;
 			this.isCompressed = isCompressed;
-			this.header = header;
 		}
 
 		@Override
@@ -125,29 +131,29 @@ interface BoundedData extends Closeable {
 		}
 
 		@Override
-		public PartitionData buildRawMessage(
-			boolean isDataAvailable,
-			boolean isEventAvailable,
-			int dataBufferBacklog) {
+		public PartitionData build(
+				boolean isDataAvailable,
+				boolean isEventAvailable,
+				int dataBufferBacklog) {
 			return new PartitionFileRegion(
 				channel,
 				position,
-				size,
+				count,
 				isDataAvailable,
 				isEventAvailable,
 				type,
 				isCompressed,
 				dataBufferBacklog,
-				header) {
+				headerBuffer) {
 			};
 		}
 	}
 
-	final class BufferWrapper implements RawData {
+	final class BoundedPartitionBuffer implements BoundedPartitionData {
 
 		private final Buffer buffer;
 
-		BufferWrapper(Buffer buffer) {
+		BoundedPartitionBuffer(Buffer buffer) {
 			this.buffer = buffer;
 		}
 
@@ -157,7 +163,7 @@ interface BoundedData extends Closeable {
 		}
 
 		@Override
-		public PartitionBuffer buildRawMessage(
+		public PartitionBuffer build(
 			boolean isDataAvailable,
 			boolean isEventAvailable,
 			int dataBufferBacklog) {

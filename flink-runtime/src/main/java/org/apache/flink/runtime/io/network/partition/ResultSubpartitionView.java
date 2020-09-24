@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
@@ -33,6 +34,8 @@ import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * A view to consume a {@link ResultSubpartition} instance.
@@ -68,9 +71,10 @@ public interface ResultSubpartitionView {
 	int unsynchronizedGetNumberOfQueuedBuffers();
 
 	abstract class PartitionData {
+
 		private final boolean isDataAvailable;
 		private final boolean isEventAvailable;
-		final int buffersInBacklog;
+		private final int buffersInBacklog;
 
 		PartitionData(boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
 			this.isDataAvailable = isDataAvailable;
@@ -78,33 +82,28 @@ public interface ResultSubpartitionView {
 			this.buffersInBacklog = buffersInBacklog;
 		}
 
-		public boolean isMoreAvailable(int credits) {
-			boolean moreAvailable;
-			if (credits > 0) {
-				moreAvailable = isDataAvailable;
-			} else {
-				moreAvailable = isEventAvailable;
-			}
-			return moreAvailable;
-		}
-
 		public abstract boolean isBuffer();
+
+		public abstract Buffer getBuffer(MemorySegment segment, BufferRecycler recycler) throws IOException;
+
+		public abstract PartitionResponseMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
+
+		public boolean isMoreAvailable(int credits) {
+			return credits > 0 ? isDataAvailable : isEventAvailable;
+		}
 
 		public boolean isDataAvailable() {
 			return isDataAvailable;
 		}
 
-		public boolean isEventAvailable() {
+		@VisibleForTesting
+		boolean isEventAvailable() {
 			return isEventAvailable;
 		}
 
-		public int buffersInBacklog() {
+		int buffersInBacklog() {
 			return buffersInBacklog;
 		}
-
-		public abstract Buffer getBuffer(MemorySegment segment, BufferRecycler recycler) throws IOException;
-
-		public abstract PartitionResponseMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
 	}
 
 	class PartitionBuffer extends PartitionData {
@@ -113,7 +112,7 @@ public interface ResultSubpartitionView {
 
 		public PartitionBuffer(Buffer buffer, boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
 			super(isDataAvailable, isEventAvailable, buffersInBacklog);
-			this.buffer = buffer;
+			this.buffer = checkNotNull(buffer);
 		}
 
 		@Override
@@ -124,7 +123,7 @@ public interface ResultSubpartitionView {
 				buffer.isCompressed(),
 				sequenceNumber,
 				id,
-				buffersInBacklog,
+				buffersInBacklog(),
 				buffer.readableBytes());
 		}
 
@@ -133,10 +132,12 @@ public interface ResultSubpartitionView {
 			return buffer.isBuffer();
 		}
 
+		@VisibleForTesting
 		public Buffer buffer() {
 			return buffer;
 		}
 
+		@Override
 		public Buffer getBuffer(MemorySegment segment, BufferRecycler recycler) {
 			return buffer;
 		}
@@ -146,45 +147,44 @@ public interface ResultSubpartitionView {
 
 		private final FileChannel fileChannel;
 		private final long position;
-		private final int size;
+		private final int count;
 		private final Buffer.DataType dataType;
 		private final boolean isCompressed;
-		private final ByteBuffer header;
+		private final ByteBuffer headerBuffer;
 
 		PartitionFileRegion(
 			FileChannel fileChannel,
 			long position,
-			int size,
+			int count,
 			boolean isDataAvailable,
 			boolean isEventAvailable,
 			Buffer.DataType dataType,
 			boolean isCompressed,
 			int buffersInBacklog,
-			ByteBuffer header) {
+			ByteBuffer headerBuffer) {
 
 			super(isDataAvailable, isEventAvailable, buffersInBacklog);
-			this.fileChannel = fileChannel;
+
+			this.fileChannel = checkNotNull(fileChannel);
 			this.position = position;
-			this.size = size;
+			this.count = count;
 			this.dataType = dataType;
 			this.isCompressed = isCompressed;
-			this.header = header;
+			this.headerBuffer = checkNotNull(headerBuffer);
 		}
 
 		@Override
 		public PartitionResponseMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException {
-			id.writeTo(header);
-			header.putInt(sequenceNumber);
-			header.putInt(buffersInBacklog);
-			header.put((byte) dataType.ordinal());
-			header.put((byte) (isCompressed ? 1 : 0));
-			header.putInt(size);
-			header.flip();
-			return new FileRegionResponse(fileChannel, position, size, header);
-		}
+			id.writeTo(headerBuffer);
+			headerBuffer.putInt(sequenceNumber);
+			headerBuffer.putInt(buffersInBacklog());
+			headerBuffer.put((byte) dataType.ordinal());
+			headerBuffer.put((byte) (isCompressed ? 1 : 0));
+			headerBuffer.putInt(count);
 
-		public boolean isCompressed() {
-			return isCompressed;
+			headerBuffer.flip();
+
+			return new FileRegionResponse(fileChannel, position, count, headerBuffer);
 		}
 
 		@Override
@@ -192,22 +192,10 @@ public interface ResultSubpartitionView {
 			return dataType == Buffer.DataType.DATA_BUFFER;
 		}
 
-		public int size() {
-			return size;
-		}
-
-		public Buffer.DataType dataType() {
-			return dataType;
-		}
-
-		public FileChannel channel() {
-			return fileChannel;
-		}
-
 		public Buffer getBuffer(MemorySegment segment, BufferRecycler recycler) throws IOException {
 			final ByteBuffer targetBuf;
 			try {
-				targetBuf = segment.wrap(0, size);
+				targetBuf = segment.wrap(0, count);
 			}
 			catch (BufferUnderflowException | IllegalArgumentException e) {
 				// buffer underflow if header buffer is undersized
@@ -216,7 +204,7 @@ public interface ResultSubpartitionView {
 			}
 
 			BufferReaderWriterUtil.readByteBufferFully(fileChannel, targetBuf);
-			return new NetworkBuffer(segment, recycler, dataType, isCompressed, size);
+			return new NetworkBuffer(segment, recycler, dataType, isCompressed, count);
 		}
 	}
 }

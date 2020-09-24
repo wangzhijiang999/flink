@@ -20,10 +20,7 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.netty.NettyMessage;
-import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 import org.apache.flink.util.IOUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -124,7 +121,7 @@ final class FileChannelBoundedData implements BoundedData {
 
 		@Nullable
 		@Override
-		public FileRegionData nextData() throws IOException {
+		public BoundedPartitionData nextData() throws IOException {
 			if (position != 0) {
 				position += dataSize;
 			}
@@ -152,9 +149,7 @@ final class FileChannelBoundedData implements BoundedData {
 			nettyHeaderBuffer.putInt(NettyMessage.MAGIC_NUMBER);
 			nettyHeaderBuffer.put(NettyMessage.FileRegionResponse.ID);
 
-			//System.out.println("isEvent:" + isEvent + ",current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
-
-			return new FileRegionData(fileChannel, position, dataSize, dataType, isCompressed, nettyHeaderBuffer);
+			return new BoundedPartitionFileRegion(fileChannel, headerBuffer, position, dataSize, dataType, isCompressed);
 		}
 
 		@Override
