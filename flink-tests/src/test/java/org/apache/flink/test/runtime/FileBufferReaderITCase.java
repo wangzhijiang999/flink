@@ -67,9 +67,9 @@ import static org.junit.Assert.assertThat;
  */
 public class FileBufferReaderITCase extends TestLogger {
 
-	private static final int parallelism = 2;
+	private static final int parallelism = 8;
 
-	private static final int numRecords = 1;
+	private static final int numRecords = 1000;
 
 	private static final byte[] dataSource = new byte[1024];
 

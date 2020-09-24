@@ -26,7 +26,7 @@ import javax.annotation.Nullable;
 public class NoOpResultSubpartitionView implements ResultSubpartitionView {
 
 	@Nullable
-	public RawMessage getNextRawMessage() {
+	public PartitionData getNextData() {
 		return null;
 	}
 

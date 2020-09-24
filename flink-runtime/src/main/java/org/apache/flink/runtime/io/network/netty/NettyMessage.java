@@ -27,10 +27,6 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.shaded.netty4.io.netty.channel.DefaultFileRegion;
-import org.apache.flink.shaded.netty4.io.netty.channel.FileRegion;
-import org.apache.flink.shaded.netty4.io.netty.handler.codec.MessageToByteEncoder;
-import org.apache.flink.shaded.netty4.io.netty.util.AbstractReferenceCounted;
-import org.apache.flink.shaded.netty4.io.netty.util.IllegalReferenceCountException;
 import org.apache.flink.util.ExceptionUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
@@ -53,7 +49,6 @@ import java.net.ProtocolException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
-import java.util.List;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -77,7 +72,12 @@ public interface NettyMessage {
 
 	ByteBuf write(ByteBufAllocator allocator) throws Exception;
 
-	default void releaseBuffer() {
+	// ------------------------------------------------------------------------
+
+	interface PartitionResponseMessage {
+
+		default void releaseMessage() {
+		}
 	}
 
 	// ------------------------------------------------------------------------
@@ -178,7 +178,6 @@ public interface NettyMessage {
 		@Override
 		public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
 			if (msg instanceof NettyMessage) {
-
 				ByteBuf serialized = null;
 
 				try {
@@ -275,7 +274,7 @@ public interface NettyMessage {
 	// Server responses
 	// ------------------------------------------------------------------------
 
-	class BufferResponse implements NettyMessage {
+	class BufferResponse implements NettyMessage, PartitionResponseMessage {
 
 		static final byte ID = 0;
 
@@ -338,6 +337,10 @@ public interface NettyMessage {
 		}
 
 		@Override
+		public void releaseMessage() {
+			releaseBuffer();
+		}
+
 		public void releaseBuffer() {
 			if (buffer != null) {
 				buffer.recycleBuffer();
@@ -425,91 +428,75 @@ public interface NettyMessage {
 		}
 	}
 
-	class FileRegionMessage extends DefaultFileRegion implements NettyMessage {
+	class FileRegionResponse extends DefaultFileRegion implements PartitionResponseMessage {
 
 		/** Use the same id with BufferResponse to reuse the BufferResponseDecoder on downstream side */
 		public static final byte ID = BufferResponse.ID;
 
 		final FileChannel file;
 
-		final long filePos;
+		final long pos;
 
-		final long headerPos;
+		final long count;
 
-		final long length;
+		final ByteBuffer headerBuffer;
 
-		final ByteBuffer headerBuf;
-
-		private long fileTransferred;
+		private long dataTransferred;
 
 		private long headerTransferred;
 
-		public FileRegionMessage(
-			FileChannel file,
-			long filePos,
-			long length,
-			ByteBuffer header) {
+		public FileRegionResponse(FileChannel file, long pos, long count, ByteBuffer headerBuffer) throws IOException {
+			super(file, pos, count);
 
-			super(file, filePos, length);
-
-			this.file = file;
-			this.filePos = filePos;
-			this.length = length;
-			this.headerBuf = header;
-			this.headerPos = headerBuf.position();
-		}
-
-		// --------------------------------------------------------------------
-		// Serialization
-		// --------------------------------------------------------------------
-
-		@Override
-		public ByteBuf write(ByteBufAllocator allocator) throws IOException {
-			return null;
+			this.file = checkNotNull(file);
+			this.headerBuffer = checkNotNull(headerBuffer);
+			this.pos = pos;
+			this.count = count;
+			if (pos + count > file.size()) {
+				throw new IOException("Underlying file size " + file.size() +
+					" smaller than requested count " + count + " from position " + pos);
+			}
 		}
 
 		@Override
 		public long position() {
-			return headerPos + filePos;
+			return  pos;
 		}
 
 		@Override
 		public long transfered() {
-			return headerTransferred + fileTransferred;
+			return headerTransferred + dataTransferred;
 		}
 
 		@Override
 		public long transferred() {
-			return headerTransferred + fileTransferred;
+			return headerTransferred + dataTransferred;
 		}
 
 		@Override
 		public long count() {
-			return headerBuf.limit() + length;
+			return headerBuffer.limit() + count;
 		}
 
 		@Override
 		public long transferTo(WritableByteChannel target, long position) throws IOException {
-			long curTransferred;
-			if (headerBuf.hasRemaining()) {
-				curTransferred = target.write(headerBuf);
-				headerTransferred += curTransferred;
-			} else {
-				curTransferred = file.transferTo(filePos + fileTransferred, length - fileTransferred, target);
-				//System.out.println("before:" + file.position() + ", transferred:" + curTransferred);
-				file.position(file.position() + curTransferred);
-				//System.out.println("after:" + file.position());
-				fileTransferred += curTransferred;
+			long written;
+			if (headerBuffer.hasRemaining()) {
+				written = target.write(headerBuffer);
+				headerTransferred += written;
 			}
-			return curTransferred;
-		}
-
-		public void close() {
-			deallocate();
+			else {
+				written = file.transferTo(pos + dataTransferred, count - dataTransferred, target);
+				// we have to update the position explicitly since the above transfer will not modify it,
+				// otherwise it would cause data corruption while reading header from the file in other places.
+				file.position(file.position() + written);
+				dataTransferred += written;
+			}
+			return written;
 		}
 
 		@Override
-		protected void deallocate() {
+		public void deallocate() {
 		}
 	}
 

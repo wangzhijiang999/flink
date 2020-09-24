@@ -72,7 +72,7 @@ public class TestInputChannel extends InputChannel {
 	}
 
 	public TestInputChannel read(Buffer buffer, boolean moreAvailable) throws IOException, InterruptedException {
-		addBufferAndAvailability(new BufferAndAvailability(buffer, moreAvailable, 0));
+		addBufferAndAvailability(new BufferAndAvailability(buffer, moreAvailable));
 		if (notifyChannelNonEmpty) {
 			notifyChannelNonEmpty();
 		}
@@ -95,8 +95,7 @@ public class TestInputChannel extends InputChannel {
 			() -> {
 				setReleased();
 				return Optional.of(new BufferAndAvailability(EventSerializer.toBuffer(EndOfPartitionEvent.INSTANCE),
-					false,
-					0));
+					false));
 			}
 		);
 		return this;

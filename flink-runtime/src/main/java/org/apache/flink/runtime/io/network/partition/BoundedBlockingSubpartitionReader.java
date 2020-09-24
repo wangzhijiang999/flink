@@ -71,7 +71,7 @@ final class BoundedBlockingSubpartitionReader implements ResultSubpartitionView 
 
 	@Nullable
 	@Override
-	public RawMessage getNextRawMessage() throws IOException {
+	public PartitionData getNextData() throws IOException {
 		assert dataReader != null;
 
 		BoundedData.RawData current = dataReader.nextData();

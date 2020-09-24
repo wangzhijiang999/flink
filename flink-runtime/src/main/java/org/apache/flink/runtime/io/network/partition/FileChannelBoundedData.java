@@ -150,7 +150,7 @@ final class FileChannelBoundedData implements BoundedData {
 			nettyHeaderBuffer.clear();
 			nettyHeaderBuffer.putInt(totalHeaderLen + dataSize);
 			nettyHeaderBuffer.putInt(NettyMessage.MAGIC_NUMBER);
-			nettyHeaderBuffer.put(NettyMessage.FileRegionMessage.ID);
+			nettyHeaderBuffer.put(NettyMessage.FileRegionResponse.ID);
 
 			//System.out.println("isEvent:" + isEvent + ",current position:" + position + ",size:" + dataSize + " from " + Thread.currentThread());
 

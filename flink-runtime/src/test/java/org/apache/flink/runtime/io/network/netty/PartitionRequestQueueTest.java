@@ -36,8 +36,6 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.io.network.util.TestBufferFactory;
@@ -202,7 +200,7 @@ public class PartitionRequestQueueTest {
 	}
 
 	private static class DefaultBufferResultSubpartitionView extends NoOpResultSubpartitionView {
-		/** Number of buffer in the backlog to report with every {@link #getNextRawMessage()} call. */
+		/** Number of buffer in the backlog to report with every {@link #getNextData()} call. */
 		private final AtomicInteger buffersInBacklog;
 
 		private DefaultBufferResultSubpartitionView(int buffersInBacklog) {
@@ -211,9 +209,9 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public RawMessage getNextRawMessage() {
+		public PartitionData getNextData() {
 			int buffers = buffersInBacklog.decrementAndGet();
-			return new RawBufferMessage(
+			return new PartitionBuffer(
 				TestBufferFactory.createBuffer(10),
 				buffers > 0,
 				false,
@@ -237,8 +235,8 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public RawMessage getNextRawMessage() {
-			return super.getNextRawMessage();
+		public PartitionData getNextData() {
+			return super.getNextData();
 		}
 	}
 

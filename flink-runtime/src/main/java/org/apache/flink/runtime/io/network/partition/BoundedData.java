@@ -19,6 +19,9 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionBuffer;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionData;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionFileRegion;
 
 import javax.annotation.Nullable;
 
@@ -92,7 +95,7 @@ interface BoundedData extends Closeable {
 
 		boolean isBuffer();
 
-		ResultSubpartitionView.RawMessage buildRawMessage(
+		PartitionData buildRawMessage(
 			boolean isDataAvailable,
 			boolean isEventAvailable,
 			int dataBufferBacklog);
@@ -122,11 +125,11 @@ interface BoundedData extends Closeable {
 		}
 
 		@Override
-		public ResultSubpartitionView.RawMessage buildRawMessage(
+		public PartitionData buildRawMessage(
 			boolean isDataAvailable,
 			boolean isEventAvailable,
 			int dataBufferBacklog) {
-			return new ResultSubpartitionView.RawFileRegion(
+			return new PartitionFileRegion(
 				channel,
 				position,
 				size,
@@ -135,7 +138,8 @@ interface BoundedData extends Closeable {
 				type,
 				isCompressed,
 				dataBufferBacklog,
-				header);
+				header) {
+			};
 		}
 	}
 
@@ -153,12 +157,12 @@ interface BoundedData extends Closeable {
 		}
 
 		@Override
-		public ResultSubpartitionView.RawMessage buildRawMessage(
+		public PartitionBuffer buildRawMessage(
 			boolean isDataAvailable,
 			boolean isEventAvailable,
 			int dataBufferBacklog) {
 
-			return new ResultSubpartitionView.RawBufferMessage(
+			return new PartitionBuffer(
 				buffer,
 				isDataAvailable,
 				isEventAvailable,

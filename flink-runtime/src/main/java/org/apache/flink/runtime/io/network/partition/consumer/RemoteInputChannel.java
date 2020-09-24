@@ -191,8 +191,8 @@ public class RemoteInputChannel extends InputChannel {
 
 		numBytesIn.inc(next.getSize());
 		numBuffersIn.inc();
-		System.out.println("reveive remote buffer:" + next.isBuffer() + ",size:" + next.getSize());
-		return Optional.of(new BufferAndAvailability(next, moreAvailable, 0));
+		//System.out.println("reveive remote buffer:" + next.isBuffer() + ",size:" + next.getSize());
+		return Optional.of(new BufferAndAvailability(next, moreAvailable));
 	}
 
 	@Override

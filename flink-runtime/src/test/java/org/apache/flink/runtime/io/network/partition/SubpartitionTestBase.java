@@ -144,11 +144,11 @@ public abstract class SubpartitionTestBase extends TestLogger {
 		reader.releaseAllResources();
 
 		// the reader must not throw an exception
-		reader.getNextRawMessage();
+		reader.getNextData();
 
 		// ideally, we want this to be null, but the pipelined partition still serves data
 		// after dispose (which is unintuitive, but does not affect correctness)
-		assertNull(reader.getNextRawMessage());
+		assertNull(reader.getNextData());
 	}
 
 	@Test

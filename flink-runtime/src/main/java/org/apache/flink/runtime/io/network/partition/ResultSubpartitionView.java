@@ -18,13 +18,13 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
-import com.sun.jna.Memory;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
-import org.apache.flink.runtime.io.network.buffer.FreeingBufferRecycler;
+import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
-import org.apache.flink.runtime.io.network.netty.NettyMessage;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
+import org.apache.flink.runtime.io.network.netty.NettyMessage.BufferResponse;
+import org.apache.flink.runtime.io.network.netty.NettyMessage.FileRegionResponse;
+import org.apache.flink.runtime.io.network.netty.NettyMessage.PartitionResponseMessage;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 
 import javax.annotation.Nullable;
@@ -40,7 +40,7 @@ import java.nio.channels.FileChannel;
 public interface ResultSubpartitionView {
 
 	/**
-	 * Returns the next {@link Buffer} instance of this queue iterator.
+	 * Returns the next {@link PartitionData} instance of this queue iterator.
 	 *
 	 * <p>If there is currently no instance available, it will return <code>null</code>.
 	 * This might happen for example when a pipelined queue producer is slower
@@ -51,7 +51,7 @@ public interface ResultSubpartitionView {
 	 * after it has been consumed.
 	 */
 	@Nullable
-	RawMessage getNextRawMessage() throws IOException;
+	PartitionData getNextData() throws IOException;
 
 	void notifyDataAvailable();
 
@@ -67,12 +67,12 @@ public interface ResultSubpartitionView {
 
 	int unsynchronizedGetNumberOfQueuedBuffers();
 
-	abstract class RawMessage {
+	abstract class PartitionData {
 		private final boolean isDataAvailable;
 		private final boolean isEventAvailable;
 		final int buffersInBacklog;
 
-		RawMessage(boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
+		PartitionData(boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
 			this.isDataAvailable = isDataAvailable;
 			this.isEventAvailable = isEventAvailable;
 			this.buffersInBacklog = buffersInBacklog;
@@ -102,22 +102,23 @@ public interface ResultSubpartitionView {
 			return buffersInBacklog;
 		}
 
-		public abstract Buffer getBuffer(MemorySegment segment) throws IOException;
+		public abstract Buffer getBuffer(MemorySegment segment, BufferRecycler recycler) throws IOException;
 
-		public abstract NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
+		public abstract PartitionResponseMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException;
 	}
 
-	class RawBufferMessage extends RawMessage {
+	class PartitionBuffer extends PartitionData {
+
 		private final Buffer buffer;
 
-		public RawBufferMessage(Buffer buffer, boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
+		public PartitionBuffer(Buffer buffer, boolean isDataAvailable, boolean isEventAvailable, int buffersInBacklog) {
 			super(isDataAvailable, isEventAvailable, buffersInBacklog);
 			this.buffer = buffer;
 		}
 
 		@Override
-		public NettyMessage buildMessage(InputChannelID id, int sequenceNumber) {
-			return new NettyMessage.BufferResponse(
+		public PartitionResponseMessage buildMessage(InputChannelID id, int sequenceNumber) {
+			return new BufferResponse(
 				buffer,
 				buffer.getDataType(),
 				buffer.isCompressed(),
@@ -125,7 +126,6 @@ public interface ResultSubpartitionView {
 				id,
 				buffersInBacklog,
 				buffer.readableBytes());
-
 		}
 
 		@Override
@@ -137,12 +137,13 @@ public interface ResultSubpartitionView {
 			return buffer;
 		}
 
-		public Buffer getBuffer(MemorySegment segment) {
+		public Buffer getBuffer(MemorySegment segment, BufferRecycler recycler) {
 			return buffer;
 		}
 	}
 
-	class RawFileRegion extends RawMessage {
+	class PartitionFileRegion extends PartitionData {
+
 		private final FileChannel fileChannel;
 		private final long position;
 		private final int size;
@@ -150,7 +151,7 @@ public interface ResultSubpartitionView {
 		private final boolean isCompressed;
 		private final ByteBuffer header;
 
-		RawFileRegion(
+		PartitionFileRegion(
 			FileChannel fileChannel,
 			long position,
 			int size,
@@ -171,7 +172,7 @@ public interface ResultSubpartitionView {
 		}
 
 		@Override
-		public NettyMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException {
+		public PartitionResponseMessage buildMessage(InputChannelID id, int sequenceNumber) throws IOException {
 			id.writeTo(header);
 			header.putInt(sequenceNumber);
 			header.putInt(buffersInBacklog);
@@ -179,11 +180,7 @@ public interface ResultSubpartitionView {
 			header.put((byte) (isCompressed ? 1 : 0));
 			header.putInt(size);
 			header.flip();
-			return new NettyMessage.FileRegionMessage(
-				fileChannel,
-				position,
-				size,
-				header);
+			return new FileRegionResponse(fileChannel, position, size, header);
 		}
 
 		public boolean isCompressed() {
@@ -207,7 +204,7 @@ public interface ResultSubpartitionView {
 			return fileChannel;
 		}
 
-		public Buffer getBuffer(MemorySegment segment) throws IOException {
+		public Buffer getBuffer(MemorySegment segment, BufferRecycler recycler) throws IOException {
 			final ByteBuffer targetBuf;
 			try {
 				targetBuf = segment.wrap(0, size);
@@ -219,7 +216,7 @@ public interface ResultSubpartitionView {
 			}
 
 			BufferReaderWriterUtil.readByteBufferFully(fileChannel, targetBuf);
-			return new NetworkBuffer(segment, FreeingBufferRecycler.INSTANCE, dataType, isCompressed, size);
+			return new NetworkBuffer(segment, recycler, dataType, isCompressed, size);
 		}
 	}
 }

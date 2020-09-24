@@ -179,7 +179,7 @@ public class NettyMessageClientDecoderDelegateTest extends TestLogger {
 			if (decodedMessages != null) {
 				for (NettyMessage nettyMessage : decodedMessages) {
 					if (nettyMessage instanceof BufferResponse) {
-						((BufferResponse) nettyMessage).releaseBuffer();
+						((BufferResponse) nettyMessage).releaseMessage();
 					}
 				}
 			}

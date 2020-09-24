@@ -97,7 +97,7 @@ public class StreamTestSingleInputGate<T> extends TestSingleInputGate {
 				}
 				if (input != null && input.isStreamEnd()) {
 					inputChannels[channelIndex].setReleased();
-					return Optional.of(new BufferAndAvailability(EventSerializer.toBuffer(EndOfPartitionEvent.INSTANCE), moreAvailable, 0));
+					return Optional.of(new BufferAndAvailability(EventSerializer.toBuffer(EndOfPartitionEvent.INSTANCE), moreAvailable));
 				} else if (input != null && input.isStreamRecord()) {
 					Object inputElement = input.getStreamRecord();
 
@@ -109,14 +109,14 @@ public class StreamTestSingleInputGate<T> extends TestSingleInputGate {
 					bufferBuilder.finish();
 
 					// Call getCurrentBuffer to ensure size is set
-					return Optional.of(new BufferAndAvailability(bufferConsumer.build(), moreAvailable, 0));
+					return Optional.of(new BufferAndAvailability(bufferConsumer.build(), moreAvailable));
 				} else if (input != null && input.isEvent()) {
 					AbstractEvent event = input.getEvent();
 					if (event instanceof EndOfPartitionEvent) {
 						inputChannels[channelIndex].setReleased();
 					}
 
-					return Optional.of(new BufferAndAvailability(EventSerializer.toBuffer(event), moreAvailable, 0));
+					return Optional.of(new BufferAndAvailability(EventSerializer.toBuffer(event), moreAvailable));
 				} else {
 					return Optional.empty();
 				}

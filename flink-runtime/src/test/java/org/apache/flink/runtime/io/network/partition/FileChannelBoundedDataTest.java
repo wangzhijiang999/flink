@@ -20,8 +20,7 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.disk.FileChannelManager;
 import org.apache.flink.runtime.io.disk.FileChannelManagerImpl;
-import org.apache.flink.runtime.io.network.buffer.Buffer;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionData;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 
 import org.junit.AfterClass;
@@ -131,8 +130,8 @@ public class FileChannelBoundedDataTest extends BoundedDataTestBase {
 		listener.resetAvailable();
 		assertFalse(listener.isAvailable);
 
-		final ResultSubpartitionView.RawMessage buffer1 = subpartitionView.getNextRawMessage();
-		final ResultSubpartitionView.RawMessage buffer2 = subpartitionView.getNextRawMessage();
+		final PartitionData buffer1 = subpartitionView.getNextData();
+		final PartitionData buffer2 = subpartitionView.getNextData();
 		assertNotNull(buffer1);
 		assertNotNull(buffer2);
 

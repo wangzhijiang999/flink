@@ -305,46 +305,14 @@ public abstract class InputChannel {
 		return event.getClass() == CheckpointBarrier.class ? (CheckpointBarrier) event : null;
 	}
 
-	/**
-	 * A combination of a {@link Buffer} and a flag indicating availability of further buffers,
-	 * and the backlog length indicating how many non-event buffers are available in the
-	 * subpartition.
-	 */
-	public static final class MessageAndAvailability {
-
-		private final NettyMessage msg;
-		private final boolean moreAvailable;
-		private final int buffersInBacklog;
-
-		public MessageAndAvailability(NettyMessage msg, boolean moreAvailable, int buffersInBacklog) {
-			this.msg = checkNotNull(msg);
-			this.moreAvailable = moreAvailable;
-			this.buffersInBacklog = buffersInBacklog;
-		}
-
-		public NettyMessage getMessage() {
-			return msg;
-		}
-
-		public boolean moreAvailable() {
-			return moreAvailable;
-		}
-
-		public int buffersInBacklog() {
-			return buffersInBacklog;
-		}
-	}
-
 	public static final class BufferAndAvailability {
 
 		private final Buffer buffer;
 		private final boolean moreAvailable;
-		private final int buffersInBacklog;
 
-		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog) {
+		public BufferAndAvailability(Buffer buffer, boolean moreAvailable) {
 			this.buffer = checkNotNull(buffer);
 			this.moreAvailable = moreAvailable;
-			this.buffersInBacklog = buffersInBacklog;
 		}
 
 		public Buffer buffer() {
@@ -353,10 +321,6 @@ public abstract class InputChannel {
 
 		public boolean moreAvailable() {
 			return moreAvailable;
-		}
-
-		public int buffersInBacklog() {
-			return buffersInBacklog;
 		}
 	}
 }

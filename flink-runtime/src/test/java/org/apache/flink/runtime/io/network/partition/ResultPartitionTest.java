@@ -34,6 +34,8 @@ import org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionBuffer;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionData;
 import org.apache.flink.runtime.taskmanager.ConsumableNotifyingResultPartitionWriterDecorator;
 import org.apache.flink.runtime.taskmanager.NoOpTaskActions;
 import org.apache.flink.runtime.taskmanager.TaskActions;
@@ -495,10 +497,10 @@ public class ResultPartitionTest {
 
 					int numConsumedBuffers = 0;
 					while (numConsumedBuffers != totalStates) {
-						ResultSubpartitionView.RawMessage bufferAndBacklog = view.getNextRawMessage();
+						PartitionData bufferAndBacklog = view.getNextData();
 						if (bufferAndBacklog != null) {
-							assertTrue(bufferAndBacklog instanceof ResultSubpartitionView.RawBufferMessage);
-							Buffer buffer = ((ResultSubpartitionView.RawBufferMessage) bufferAndBacklog).buffer();
+							assertTrue(bufferAndBacklog instanceof PartitionBuffer);
+							Buffer buffer = ((PartitionBuffer) bufferAndBacklog).buffer();
 							BufferBuilderAndConsumerTest.assertContent(
 								buffer,
 								partition.getBufferPool()
@@ -510,7 +512,7 @@ public class ResultPartitionTest {
 							Thread.sleep(5);
 						}
 					}
-					assertNull(view.getNextRawMessage());
+					assertNull(view.getNextData());
 				}
 				return null;
 			};

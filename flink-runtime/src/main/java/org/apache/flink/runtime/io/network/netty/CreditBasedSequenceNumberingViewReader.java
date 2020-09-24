@@ -143,7 +143,7 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 
 	@Override
 	public MessageAndAvailability getNextMessage() throws IOException {
-		ResultSubpartitionView.RawMessage next = subpartitionView.getNextRawMessage();
+		ResultSubpartitionView.PartitionData next = subpartitionView.getNextData();
 		if (next != null) {
 			sequenceNumber++;
 
@@ -151,7 +151,9 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 				throw new IllegalStateException("no credit available");
 			}
 
-			return new MessageAndAvailability(next.buildMessage(receiverId, sequenceNumber), next.isMoreAvailable(numCreditsAvailable));
+			return new MessageAndAvailability(
+				next.buildMessage(receiverId, sequenceNumber),
+				next.isMoreAvailable(numCreditsAvailable));
 		} else {
 			return null;
 		}

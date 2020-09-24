@@ -26,6 +26,8 @@ import org.apache.flink.runtime.io.disk.FileChannelManagerImpl;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferDecompressor;
+import org.apache.flink.runtime.io.network.buffer.FreeingBufferRecycler;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionData;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 
 import org.junit.AfterClass;
@@ -168,15 +170,15 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 			int numBuffers,
 			boolean compressionEnabled,
 			BufferDecompressor decompressor) throws Exception {
-		ResultSubpartitionView.RawMessage next;
+		PartitionData next;
 		long expectedNextLong = 0L;
 		int nextExpectedBacklog = numBuffers - 1;
 
-		while ((next = reader.getNextRawMessage()) != null && next.isBuffer()) {
+		while ((next = reader.getNextData()) != null && next.isBuffer()) {
 			assertTrue(next.isDataAvailable());
 			assertEquals(nextExpectedBacklog, next.buffersInBacklog());
 
-			Buffer buf = next.getBuffer(MemorySegmentFactory.allocateUnpooledSegment(BUFFER_SIZE));
+			Buffer buf = next.getBuffer(MemorySegmentFactory.allocateUnpooledSegment(BUFFER_SIZE), FreeingBufferRecycler.INSTANCE);
 			ByteBuffer buffer = buf.getNioBufferReadable();
 			if (compressionEnabled && buf.isCompressed()) {
 				Buffer uncompressedBuffer = decompressor.decompressToIntermediateBuffer(buf);

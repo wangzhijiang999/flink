@@ -19,7 +19,7 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionData;
 
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -69,7 +69,7 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 		final ResultSubpartitionView reader = subpartition.createReadView(listener);
 
 		// test
-		final List<ResultSubpartitionView.RawMessage> data = drainAvailableData(reader);
+		final List<PartitionData> data = drainAvailableData(reader);
 
 		// assert
 		assertFalse(reader.isAvailable(Integer.MAX_VALUE));
@@ -88,7 +88,7 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 		final ResultSubpartitionView reader = subpartition.createReadView(listener);
 
 		// test
-		final List<ResultSubpartitionView.RawMessage> data = drainAvailableData(reader);
+		final List<PartitionData> data = drainAvailableData(reader);
 
 		// assert
 		assertTrue(reader.isAvailable(Integer.MAX_VALUE));
@@ -136,11 +136,11 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 		}
 	}
 
-	private static List<ResultSubpartitionView.RawMessage> drainAvailableData(ResultSubpartitionView reader) throws Exception {
-		final ArrayList<ResultSubpartitionView.RawMessage> list = new ArrayList<>();
+	private static List<PartitionData> drainAvailableData(ResultSubpartitionView reader) throws Exception {
+		final ArrayList<PartitionData> list = new ArrayList<>();
 
-		ResultSubpartitionView.RawMessage bab;
-		while ((bab = reader.getNextRawMessage()) != null) {
+		PartitionData bab;
+		while ((bab = reader.getNextData()) != null) {
 			list.add(bab);
 		}
 
@@ -148,8 +148,8 @@ public class BoundedBlockingSubpartitionAvailabilityTest {
 	}
 
 	private static void drainAllData(ResultSubpartitionView reader) throws Exception {
-		ResultSubpartitionView.RawMessage bab;
-		while ((bab = reader.getNextRawMessage()) != null) {
+		PartitionData bab;
+		while ((bab = reader.getNextData()) != null) {
 			//bab.buffer().recycleBuffer();
 		}
 	}

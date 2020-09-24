@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentProvider;
 import org.apache.flink.runtime.checkpoint.channel.ChannelStateReader;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
@@ -32,6 +33,7 @@ import org.apache.flink.runtime.io.network.buffer.BufferDecompressor;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.buffer.BufferReceivedListener;
+import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
@@ -54,6 +56,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +109,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  * in two partitions (Partition 1 and 2). Each of these partitions is further partitioned into two
  * subpartitions -- one for each parallel reduce subtask.
  */
-public class SingleInputGate extends IndexedInputGate {
+public class SingleInputGate extends IndexedInputGate implements BufferRecycler {
 
 	private static final Logger LOG = LoggerFactory.getLogger(SingleInputGate.class);
 
@@ -190,6 +193,9 @@ public class SingleInputGate extends IndexedInputGate {
 
 	private final MemorySegmentProvider memorySegmentProvider;
 
+	@Nullable
+	private MemorySegment localSegment;
+
 	public SingleInputGate(
 		String owningTaskName,
 		int gateIndex,
@@ -235,8 +241,24 @@ public class SingleInputGate extends IndexedInputGate {
 		// assign exclusive buffers to input channels directly and use the rest for floating buffers
 		assignExclusiveSegments();
 
+		if (consumedPartitionType.isBlocking()) {
+			Collection<MemorySegment> segments = memorySegmentProvider.requestMemorySegments(1);
+			for (MemorySegment segment : segments) {
+				localSegment = segment;
+			}
+		}
+
 		BufferPool bufferPool = bufferPoolFactory.get();
 		setBufferPool(bufferPool);
+	}
+
+	@Override
+	public void recycle(MemorySegment memorySegment) {
+	}
+
+	@Nullable
+	MemorySegment getLocalSegment() {
+		return localSegment;
 	}
 
 	@Override
@@ -568,6 +590,10 @@ public class SingleInputGate extends IndexedInputGate {
 					// reader received all of the data from the input channels.
 					if (bufferPool != null) {
 						bufferPool.lazyDestroy();
+					}
+
+					if (localSegment != null) {
+						memorySegmentProvider.recycleMemorySegments(Collections.singleton(localSegment));
 					}
 				}
 				finally {

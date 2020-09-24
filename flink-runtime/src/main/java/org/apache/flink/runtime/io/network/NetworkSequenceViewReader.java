@@ -18,10 +18,9 @@
 
 package org.apache.flink.runtime.io.network;
 
-import org.apache.flink.runtime.io.network.netty.NettyMessage;
+import org.apache.flink.runtime.io.network.netty.NettyMessage.PartitionResponseMessage;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
-import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.BufferAndAvailability;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 
 import java.io.IOException;
@@ -81,15 +80,15 @@ public interface NetworkSequenceViewReader {
 
 	final class MessageAndAvailability {
 
-		private final NettyMessage msg;
+		private final PartitionResponseMessage msg;
 		private final boolean moreAvailable;
 
-		public MessageAndAvailability(NettyMessage msg, boolean moreAvailable) {
+		public MessageAndAvailability(PartitionResponseMessage msg, boolean moreAvailable) {
 			this.msg = checkNotNull(msg);
 			this.moreAvailable = moreAvailable;
 		}
 
-		public NettyMessage getMessage() {
+		public PartitionResponseMessage getMessage() {
 			return msg;
 		}
 

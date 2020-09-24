@@ -23,7 +23,6 @@ import org.apache.flink.runtime.io.network.NetworkSequenceViewReader;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.netty.NettyMessage.ErrorResponse;
 import org.apache.flink.runtime.io.network.partition.ProducerFailedException;
-import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.BufferAndAvailability;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 
 import org.apache.flink.shaded.netty4.io.netty.channel.Channel;
@@ -42,8 +41,6 @@ import java.util.ArrayDeque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
-
-import static org.apache.flink.runtime.io.network.netty.NettyMessage.BufferResponse;
 
 /**
  * A nonEmptyReader of partition queues, which listens for channel writability changed
@@ -243,7 +240,7 @@ class PartitionRequestQueue extends ChannelInboundHandlerAdapter {
 			}
 		} catch (Throwable t) {
 			if (next != null) {
-				next.getMessage().releaseBuffer();
+				next.getMessage().releaseMessage();
 			}
 
 			throw new IOException(t.getMessage(), t);

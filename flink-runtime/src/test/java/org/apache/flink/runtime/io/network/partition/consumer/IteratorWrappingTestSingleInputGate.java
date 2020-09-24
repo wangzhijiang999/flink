@@ -86,13 +86,12 @@ public class IteratorWrappingTestSingleInputGate<T extends IOReadableWritable> e
 					hasData = inputIterator.next(reuse) != null;
 
 					// Call getCurrentBuffer to ensure size is set
-					return Optional.of(new BufferAndAvailability(bufferConsumer.build(), true, 0));
+					return Optional.of(new BufferAndAvailability(bufferConsumer.build(), true));
 				} else {
 					inputChannel.setReleased();
 
 					return Optional.of(new BufferAndAvailability(EventSerializer.toBuffer(EndOfPartitionEvent.INSTANCE),
-						false,
-						0));
+						false));
 				}
 			}
 		};
