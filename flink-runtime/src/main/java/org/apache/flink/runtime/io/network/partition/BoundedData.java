@@ -19,11 +19,17 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.runtime.io.network.buffer.Buffer;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionBuffer;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionData;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionFileRegion;
 
 import javax.annotation.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * BoundedData is the data store in a single bounded blocking subpartition.
@@ -83,6 +89,86 @@ interface BoundedData extends Closeable {
 	interface Reader extends Closeable {
 
 		@Nullable
-		Buffer nextBuffer() throws IOException;
+		BoundedPartitionData nextData() throws IOException;
+	}
+
+	interface BoundedPartitionData {
+
+		boolean isBuffer();
+
+		PartitionData build(Buffer.DataType nextDataType, int backlog, int sequenceNumber);
+	}
+
+	final class BoundedPartitionFileRegion implements BoundedPartitionData {
+
+		private final FileChannel file;
+		private final long position;
+		private final int count;
+		private final Buffer.DataType type;
+		private final boolean isCompressed;
+
+		BoundedPartitionFileRegion(
+			FileChannel file,
+			long position,
+			int count,
+			Buffer.DataType type,
+			boolean isCompressed) {
+
+			this.file = checkNotNull(file);
+			this.position = position;
+			this.count = count;
+			this.type = checkNotNull(type);
+			this.isCompressed = isCompressed;
+		}
+
+		@Override
+		public boolean isBuffer() {
+			return type == Buffer.DataType.DATA_BUFFER;
+		}
+
+		@Override
+		public PartitionData build(
+			Buffer.DataType nextDataType,
+			int backlog,
+			int sequenceNumber) {
+
+			return new PartitionFileRegion(
+				file,
+				position,
+				count,
+				type,
+				nextDataType,
+				isCompressed,
+				backlog,
+				sequenceNumber) {
+			};
+		}
+	}
+
+	final class BoundedPartitionBuffer implements BoundedPartitionData {
+
+		private final Buffer buffer;
+
+		BoundedPartitionBuffer(Buffer buffer) {
+			this.buffer = checkNotNull(buffer);
+		}
+
+		@Override
+		public boolean isBuffer() {
+			return buffer.isBuffer();
+		}
+
+		@Override
+		public PartitionData build(
+			Buffer.DataType nextDataType,
+			int backlog,
+			int sequenceNumber) {
+
+			return new PartitionBuffer(
+				buffer,
+				backlog,
+				nextDataType,
+				sequenceNumber);
+		}
 	}
 }

@@ -25,7 +25,6 @@ import org.apache.flink.runtime.io.network.netty.NettyTestUtil.NettyServerAndCli
 import org.apache.flink.runtime.io.network.partition.BufferAvailabilityListener;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.io.network.util.TestPooledBufferProvider;
@@ -186,11 +185,11 @@ public class CancelPartitionRequestTest {
 
 		@Nullable
 		@Override
-		public BufferAndBacklog getNextBuffer() throws IOException {
+		public PartitionData getNextData() throws IOException {
 			Buffer buffer = bufferProvider.requestBuffer();
 			if (buffer != null) {
 				buffer.setSize(buffer.getMaxCapacity()); // fake some data
-				return new BufferAndBacklog(buffer, 0, Buffer.DataType.DATA_BUFFER, 0);
+				return new PartitionBuffer(buffer, 0, Buffer.DataType.DATA_BUFFER, 0);
 			} else {
 				return null;
 			}

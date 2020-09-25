@@ -36,7 +36,6 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.io.network.util.TestBufferFactory;
@@ -203,7 +202,7 @@ public class PartitionRequestQueueTest {
 	}
 
 	private static class DefaultBufferResultSubpartitionView extends NoOpResultSubpartitionView {
-		/** Number of buffer in the backlog to report with every {@link #getNextBuffer()} call. */
+		/** Number of buffer in the backlog to report with every {@link #getNextData()} call. */
 		private final AtomicInteger buffersInBacklog;
 
 		private DefaultBufferResultSubpartitionView(int buffersInBacklog) {
@@ -212,9 +211,9 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public BufferAndBacklog getNextBuffer() {
+		public PartitionData getNextData() {
 			int buffers = buffersInBacklog.decrementAndGet();
-			return new BufferAndBacklog(
+			return new PartitionBuffer(
 				TestBufferFactory.createBuffer(10),
 				buffers,
 				buffers > 0 ? Buffer.DataType.DATA_BUFFER : Buffer.DataType.NONE,
@@ -238,13 +237,8 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public BufferAndBacklog getNextBuffer() {
-			BufferAndBacklog nextBuffer = super.getNextBuffer();
-			return new BufferAndBacklog(
-				nextBuffer.buffer().readOnlySlice(),
-				nextBuffer.buffersInBacklog(),
-				nextBuffer.getNextDataType(),
-				0);
+		public PartitionData getNextData() {
+			return super.getNextData();
 		}
 	}
 
@@ -426,9 +420,9 @@ public class PartitionRequestQueueTest {
 		assertEquals(0, subpartition.unsynchronizedGetNumberOfQueuedBuffers());
 
 		Object data1 = channel.readOutbound();
-		assertEquals(dataType1, ((NettyMessage.BufferResponse) data1).buffer.getDataType());
+		assertEquals(dataType1, ((NettyMessage.BufferResponse) data1).getDataType());
 		Object data2 = channel.readOutbound();
-		assertEquals(dataType2, ((NettyMessage.BufferResponse) data2).buffer.getDataType());
+		assertEquals(dataType2, ((NettyMessage.BufferResponse) data2).getDataType());
 	}
 
 	@Test

@@ -23,8 +23,6 @@ import org.apache.flink.runtime.checkpoint.channel.ResultSubpartitionInfo;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 
-import javax.annotation.Nullable;
-
 import java.io.IOException;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -144,16 +142,8 @@ public abstract class ResultSubpartition {
 			return buffer;
 		}
 
-		public boolean isDataAvailable() {
-			return nextDataType != Buffer.DataType.NONE;
-		}
-
 		public int buffersInBacklog() {
 			return buffersInBacklog;
-		}
-
-		public boolean isEventAvailable() {
-			return nextDataType.isEvent();
 		}
 
 		public Buffer.DataType getNextDataType() {
@@ -162,18 +152,6 @@ public abstract class ResultSubpartition {
 
 		public int getSequenceNumber() {
 			return sequenceNumber;
-		}
-
-		public static BufferAndBacklog fromBufferAndLookahead(
-				Buffer current,
-				@Nullable Buffer lookahead,
-				int backlog,
-				int sequenceNumber) {
-			return new BufferAndBacklog(
-				current,
-				backlog,
-				lookahead != null ? lookahead.getDataType() : Buffer.DataType.NONE,
-				sequenceNumber);
 		}
 	}
 

@@ -178,9 +178,7 @@ public class NettyMessageClientDecoderDelegateTest extends TestLogger {
 
 			if (decodedMessages != null) {
 				for (NettyMessage nettyMessage : decodedMessages) {
-					if (nettyMessage instanceof BufferResponse) {
-						((BufferResponse) nettyMessage).releaseBuffer();
-					}
+					nettyMessage.recycle();
 				}
 			}
 		}
@@ -239,7 +237,7 @@ public class NettyMessageClientDecoderDelegateTest extends TestLogger {
 	private ByteBuf[] encodeMessages(List<NettyMessage> messages) throws Exception {
 		ByteBuf[] encodedMessages = new ByteBuf[messages.size()];
 		for (int i = 0; i < messages.size(); ++i) {
-			encodedMessages[i] = messages.get(i).write(ALLOCATOR);
+			encodedMessages[i] = (ByteBuf) messages.get(i).write(ALLOCATOR);
 		}
 
 		return encodedMessages;
@@ -325,7 +323,7 @@ public class NettyMessageClientDecoderDelegateTest extends TestLogger {
 				BufferResponse actual = (BufferResponse) decodedMessages.get(i);
 
 				verifyBufferResponseHeader(expected, actual);
-				if (expected.bufferSize == 0 || !expected.receiverId.equals(inputChannelId)) {
+				if (expected.bufferSize == 0 || !expected.getReceiverId().equals(inputChannelId)) {
 					assertNull(actual.getBuffer());
 				} else {
 					assertEquals(expected.getBuffer(), actual.getBuffer());

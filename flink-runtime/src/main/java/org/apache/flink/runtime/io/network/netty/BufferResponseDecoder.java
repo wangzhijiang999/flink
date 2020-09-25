@@ -24,7 +24,7 @@ import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandlerContext;
 import javax.annotation.Nullable;
 
 import static org.apache.flink.runtime.io.network.netty.NettyMessage.BufferResponse;
-import static org.apache.flink.runtime.io.network.netty.NettyMessage.BufferResponse.MESSAGE_HEADER_LENGTH;
+import static org.apache.flink.runtime.io.network.netty.NettyMessage.ResponseInfo.MESSAGE_HEADER_LENGTH;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**

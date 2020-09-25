@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.io.network.api.writer;
 
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
-import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.partition.NoOpBufferAvailablityListener;
@@ -41,6 +40,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -152,9 +152,11 @@ public class RecordWriterDelegateTest extends TestLogger {
 
 		// recycle the buffer to make the local pool available again
 		ResultSubpartitionView readView = recordWriter.getTargetPartition().createSubpartitionView(0, new NoOpBufferAvailablityListener());
-		Buffer buffer = readView.getNextBuffer().buffer();
+		ResultSubpartitionView.PartitionData data = readView.getNextData();
 
-		buffer.recycleBuffer();
+		assertNotNull(data);
+		assertTrue(data instanceof ResultSubpartitionView.PartitionBuffer);
+		((ResultSubpartitionView.PartitionBuffer) data).buffer().recycleBuffer();
 		assertTrue(future.isDone());
 		assertTrue(writerDelegate.isAvailable());
 		assertTrue(writerDelegate.getAvailableFuture().isDone());
@@ -173,7 +175,7 @@ public class RecordWriterDelegateTest extends TestLogger {
 				assertEquals(1, partition.getNumberOfQueuedBuffers(i));
 
 				ResultSubpartitionView view = partition.createSubpartitionView(i, new NoOpBufferAvailablityListener());
-				BufferOrEvent boe = RecordWriterTest.parseBuffer(view.getNextBuffer().buffer(), i);
+				BufferOrEvent boe = RecordWriterTest.parseBuffer(RecordWriterTest.getBuffer(view.getNextData()), i);
 				assertTrue(boe.isEvent());
 				assertEquals(message, boe.getEvent());
 			}

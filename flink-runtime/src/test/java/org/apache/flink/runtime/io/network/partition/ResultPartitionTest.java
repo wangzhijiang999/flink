@@ -27,12 +27,15 @@ import org.apache.flink.runtime.io.disk.FileChannelManagerImpl;
 import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.NettyShuffleEnvironmentBuilder;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
+import org.apache.flink.runtime.io.network.api.writer.RecordWriterTest;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilderAndConsumerTest;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionBuffer;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionData;
 import org.apache.flink.runtime.taskmanager.ConsumableNotifyingResultPartitionWriterDecorator;
 import org.apache.flink.runtime.taskmanager.NoOpTaskActions;
 import org.apache.flink.runtime.taskmanager.TaskActions;
@@ -504,9 +507,10 @@ public class ResultPartitionTest {
 
 					int numConsumedBuffers = 0;
 					while (numConsumedBuffers != totalStates) {
-						ResultSubpartition.BufferAndBacklog bufferAndBacklog = view.getNextBuffer();
+						PartitionData bufferAndBacklog = view.getNextData();
 						if (bufferAndBacklog != null) {
-							Buffer buffer = bufferAndBacklog.buffer();
+							assertTrue(bufferAndBacklog instanceof PartitionBuffer);
+							Buffer buffer = ((PartitionBuffer) bufferAndBacklog).buffer();
 							BufferBuilderAndConsumerTest.assertContent(
 								buffer,
 								partition.getBufferPool()
@@ -518,7 +522,7 @@ public class ResultPartitionTest {
 							Thread.sleep(5);
 						}
 					}
-					assertNull(view.getNextBuffer());
+					assertNull(view.getNextData());
 				}
 				return null;
 			};
@@ -580,7 +584,7 @@ public class ResultPartitionTest {
 
 		resultPartition.emitRecord(ByteBuffer.allocate(bufferSize), 0);
 		ResultSubpartitionView readView = resultPartition.createSubpartitionView(0, new NoOpBufferAvailablityListener());
-		Buffer buffer = readView.getNextBuffer().buffer();
+		Buffer buffer = RecordWriterTest.getBuffer(readView.getNextData());
 		assertNotNull(buffer);
 
 		// idle time is zero when there is buffer available.
@@ -608,7 +612,7 @@ public class ResultPartitionTest {
 		requestThread.join();
 
 		Assert.assertThat(resultPartition.getIdleTimeMsPerSecond().getCount(), Matchers.greaterThan(0L));
-		assertNotNull(readView.getNextBuffer().buffer());
+		assertNotNull(RecordWriterTest.getBuffer(readView.getNextData()));
 	}
 
 	@Test
@@ -637,17 +641,17 @@ public class ResultPartitionTest {
 
 		ResultSubpartitionView readView1 = partition.createSubpartitionView(0, new NoOpBufferAvailablityListener());
 		for (int i = 0; i < 4; ++i) {
-			assertEquals(record, readView1.getNextBuffer().buffer().getNioBufferReadable());
+			assertEquals(record, RecordWriterTest.getBuffer(readView1.getNextData()).getNioBufferReadable());
 		}
-		assertFalse(readView1.getNextBuffer().buffer().isBuffer());
-		assertNull(readView1.getNextBuffer());
+		assertFalse(RecordWriterTest.getBuffer(readView1.getNextData()).isBuffer());
+		assertNull(readView1.getNextData());
 
 		ResultSubpartitionView readView2 = partition.createSubpartitionView(1, new NoOpBufferAvailablityListener());
 		for (int i = 0; i < 2; ++i) {
-			assertEquals(record, readView2.getNextBuffer().buffer().getNioBufferReadable());
+			assertEquals(record, RecordWriterTest.getBuffer(readView2.getNextData()).getNioBufferReadable());
 		}
-		assertFalse(readView2.getNextBuffer().buffer().isBuffer());
-		assertNull(readView2.getNextBuffer());
+		assertFalse(RecordWriterTest.getBuffer(readView2.getNextData()).isBuffer());
+		assertNull(readView2.getNextData());
 	}
 
 	/**

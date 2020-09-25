@@ -29,6 +29,7 @@ import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionBuffer;
 
 import org.apache.flink.shaded.guava18.com.google.common.collect.Iterators;
 
@@ -270,7 +271,7 @@ public class PipelinedSubpartition extends ResultSubpartition
 	}
 
 	@Nullable
-	BufferAndBacklog pollBuffer() {
+	PartitionBuffer pollBuffer() {
 		synchronized (buffers) {
 			if (isBlockedByCheckpoint) {
 				return null;
@@ -322,7 +323,7 @@ public class PipelinedSubpartition extends ResultSubpartition
 			// Do not report last remaining buffer on buffers as available to read (assuming it's unfinished).
 			// It will be reported for reading either on flush or when the number of buffers in the queue
 			// will be 2 or more.
-			return new BufferAndBacklog(
+			return new PartitionBuffer(
 				buffer,
 				getBuffersInBacklog(),
 				isDataAvailableUnsafe() ? getNextBufferTypeUnsafe() : Buffer.DataType.NONE,

@@ -26,7 +26,6 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
-import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.BufferAndAvailability;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 
@@ -63,9 +62,9 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	private int numCreditsAvailable;
 
 	CreditBasedSequenceNumberingViewReader(
-			InputChannelID receiverId,
-			int initialCredit,
-			PartitionRequestQueue requestQueue) {
+		InputChannelID receiverId,
+		int initialCredit,
+		PartitionRequestQueue requestQueue) {
 
 		this.receiverId = receiverId;
 		this.numCreditsAvailable = initialCredit;
@@ -137,12 +136,12 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	 * @implSpec BEWARE: this must be in sync with {@link #isAvailable()}, such that
 	 * {@code getNextDataType(bufferAndBacklog) != NONE <=> isAvailable()}!
 	 *
-	 * @param bufferAndBacklog
+	 * @param partitionData
 	 * 		current buffer and backlog including information about the next buffer
 	 * @return the next data type if the next buffer can be pulled immediately or {@link Buffer.DataType#NONE}
 	 */
-	private Buffer.DataType getNextDataType(BufferAndBacklog bufferAndBacklog) {
-		final Buffer.DataType nextDataType = bufferAndBacklog.getNextDataType();
+	private Buffer.DataType getNextDataType(ResultSubpartitionView.PartitionData partitionData) {
+		final Buffer.DataType nextDataType = partitionData.getNextDataType();
 		if (numCreditsAvailable > 0 || nextDataType.isEvent()) {
 			return nextDataType;
 		}
@@ -166,19 +165,16 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 
 	@Nullable
 	@Override
-	public BufferAndAvailability getNextBuffer() throws IOException {
-		BufferAndBacklog next = subpartitionView.getNextBuffer();
+	public DataAndAvailability getNextData() throws IOException {
+		ResultSubpartitionView.PartitionData next = subpartitionView.getNextData();
 		if (next != null) {
-			if (next.buffer().isBuffer() && --numCreditsAvailable < 0) {
+			if (next.isBuffer() && --numCreditsAvailable < 0) {
 				throw new IllegalStateException("no credit available");
 			}
 
-			final Buffer.DataType nextDataType = getNextDataType(next);
-			return new BufferAndAvailability(
-				next.buffer(),
-				nextDataType,
-				next.buffersInBacklog(),
-				next.getSequenceNumber());
+			return new DataAndAvailability(
+				next.buildMessage(receiverId),
+				getNextDataType(next));
 		} else {
 			return null;
 		}

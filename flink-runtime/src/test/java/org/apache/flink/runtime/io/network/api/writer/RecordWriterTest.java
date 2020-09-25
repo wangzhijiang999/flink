@@ -50,6 +50,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionTest;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionBuffer;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.util.DeserializationUtils;
 import org.apache.flink.runtime.operators.shipping.OutputEmitter;
@@ -119,7 +120,7 @@ public class RecordWriterTest {
 		for (int i = 0; i < numberOfChannels; i++) {
 			assertEquals(1, partition.getNumberOfQueuedBuffers(i));
 			ResultSubpartitionView view = partition.createSubpartitionView(i, new NoOpBufferAvailablityListener());
-			BufferOrEvent boe = parseBuffer(view.getNextBuffer().buffer(), i);
+			BufferOrEvent boe = parseBuffer(getBuffer(view.getNextData()), i);
 			assertTrue(boe.isEvent());
 			assertEquals(barrier, boe.getEvent());
 			assertFalse(view.isAvailable(Integer.MAX_VALUE));
@@ -173,10 +174,10 @@ public class RecordWriterTest {
 
 				ResultSubpartitionView view = partition.createSubpartitionView(i, new NoOpBufferAvailablityListener());
 				for (int j = 0; j < 3; j++) {
-					assertTrue(parseBuffer(view.getNextBuffer().buffer(), 0).isBuffer());
+					assertTrue(parseBuffer(getBuffer(view.getNextData()), 0).isBuffer());
 				}
 
-				BufferOrEvent boe = parseBuffer(view.getNextBuffer().buffer(), i);
+				BufferOrEvent boe = parseBuffer(getBuffer(view.getNextData()), i);
 				assertTrue(boe.isEvent());
 				assertEquals(barrier, boe.getEvent());
 			}
@@ -186,23 +187,23 @@ public class RecordWriterTest {
 
 			assertEquals(2, partition.getNumberOfQueuedBuffers(0)); // 1 buffer + 1 event
 			views[0] = partition.createSubpartitionView(0, new NoOpBufferAvailablityListener());
-			assertTrue(parseBuffer(views[0].getNextBuffer().buffer(), 0).isBuffer());
+			assertTrue(parseBuffer(getBuffer(views[0].getNextData()), 0).isBuffer());
 
 			assertEquals(3, partition.getNumberOfQueuedBuffers(1)); // 2 buffers + 1 event
 			views[1] = partition.createSubpartitionView(1, new NoOpBufferAvailablityListener());
-			assertTrue(parseBuffer(views[1].getNextBuffer().buffer(), 1).isBuffer());
-			assertTrue(parseBuffer(views[1].getNextBuffer().buffer(), 1).isBuffer());
+			assertTrue(parseBuffer(getBuffer(views[1].getNextData()), 1).isBuffer());
+			assertTrue(parseBuffer(getBuffer(views[1].getNextData()), 1).isBuffer());
 
 			assertEquals(2, partition.getNumberOfQueuedBuffers(2)); // 1 buffer + 1 event
 			views[2] = partition.createSubpartitionView(2, new NoOpBufferAvailablityListener());
-			assertTrue(parseBuffer(views[2].getNextBuffer().buffer(), 2).isBuffer());
+			assertTrue(parseBuffer(getBuffer(views[2].getNextData()), 2).isBuffer());
 
 			views[3] = partition.createSubpartitionView(3, new NoOpBufferAvailablityListener());
 			assertEquals(1, partition.getNumberOfQueuedBuffers(3)); // 0 buffers + 1 event
 
 			// every queue's last element should be the event
 			for (int i = 0; i < numberOfChannels; i++) {
-				BufferOrEvent boe = parseBuffer(views[i].getNextBuffer().buffer(), i);
+				BufferOrEvent boe = parseBuffer(getBuffer(views[i].getNextData()), i);
 				assertTrue(boe.isEvent());
 				assertEquals(barrier, boe.getEvent());
 			}
@@ -230,7 +231,7 @@ public class RecordWriterTest {
 		for (int i = 0; i < numSubpartitions; i++) {
 			assertEquals(1, partition.getNumberOfQueuedBuffers(i));
 			ResultSubpartitionView view = partition.createSubpartitionView(i, new NoOpBufferAvailablityListener());
-			buffers[i] = view.getNextBuffer().buffer();
+			buffers[i] = getBuffer(view.getNextData());
 			assertTrue(parseBuffer(buffers[i], i).isEvent());
 		}
 
@@ -362,14 +363,14 @@ public class RecordWriterTest {
 
 			for (ResultSubpartition subpartition : partition.getAllPartitions()) {
 				// create the view to consume all the buffers with states and records
-				final ResultSubpartitionView view = new PipelinedSubpartitionView(
+				final PipelinedSubpartitionView view = new PipelinedSubpartitionView(
 					(PipelinedSubpartition) subpartition,
 					new NoOpBufferAvailablityListener());
 
 				int numConsumedBuffers = 0;
-				ResultSubpartition.BufferAndBacklog bufferAndBacklog;
-				while ((bufferAndBacklog = view.getNextBuffer()) != null) {
-					Buffer buffer = bufferAndBacklog.buffer();
+				ResultSubpartitionView.PartitionBuffer partitionBuffer;
+				while ((partitionBuffer = view.getNextData()) != null) {
+					Buffer buffer = partitionBuffer.buffer();
 					int[] expected = numConsumedBuffers < totalStates ? states : expectedRecordsInBuffer[numConsumedBuffers - totalStates];
 					BufferBuilderAndConsumerTest.assertContent(
 						buffer,
@@ -408,8 +409,8 @@ public class RecordWriterTest {
 		ResultSubpartitionView view1 = partition.createSubpartitionView(1, new NoOpBufferAvailablityListener());
 
 		// these two buffers may share the memory but not the indices!
-		Buffer buffer1 = view0.getNextBuffer().buffer();
-		Buffer buffer2 = view1.getNextBuffer().buffer();
+		Buffer buffer1 = getBuffer(view0.getNextData());
+		Buffer buffer2 = getBuffer(view1.getNextData());
 		assertEquals(0, buffer1.getReaderIndex());
 		assertEquals(0, buffer2.getReaderIndex());
 		buffer1.setReaderIndex(1);
@@ -424,7 +425,7 @@ public class RecordWriterTest {
 			int numValues) throws Exception {
 		int assertRecords = 0;
 		for (int j = 0; j < numRequiredBuffers; j++) {
-			Buffer buffer = view.getNextBuffer().buffer();
+			Buffer buffer = getBuffer(view.getNextData());
 			deserializer.setNextBuffer(buffer);
 
 			assertRecords += DeserializationUtils.deserializeRecords(expectedRecords, deserializer);
@@ -466,6 +467,11 @@ public class RecordWriterTest {
 			buffer.recycleBuffer(); // the buffer is not needed anymore
 			return new BufferOrEvent(event, new InputChannelInfo(0, targetChannel));
 		}
+	}
+
+	public static Buffer getBuffer(ResultSubpartitionView.PartitionData data) {
+		assertTrue(data instanceof PartitionBuffer);
+		return ((PartitionBuffer) data).buffer();
 	}
 
 	private static class ByteArrayIO implements IOReadableWritable {

@@ -16,49 +16,27 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.io.network.partition;
+package org.apache.flink.runtime.io.network.buffer;
 
-import javax.annotation.Nullable;
+import org.apache.flink.core.memory.MemorySegment;
 
 /**
- * A dummy implementation of the {@link ResultSubpartitionView}.
+ * A simple buffer recycler that frees the memory segments.
  */
-public class NoOpResultSubpartitionView implements ResultSubpartitionView {
+public class DummyBufferRecycler implements BufferRecycler {
 
-	@Nullable
-	public PartitionData getNextData() {
-		return null;
-	}
+	public static final BufferRecycler INSTANCE = new DummyBufferRecycler();
 
+	// ------------------------------------------------------------------------
+
+	// Not instantiable
+	private DummyBufferRecycler() {}
+
+	/**
+	 * Frees the given memory segment.
+	 * @param memorySegment The memory segment to be recycled.
+	 */
 	@Override
-	public void notifyDataAvailable() {
-	}
-
-	@Override
-	public void releaseAllResources() {
-	}
-
-	@Override
-	public boolean isReleased() {
-		return false;
-	}
-
-	@Override
-	public void resumeConsumption() {
-	}
-
-	@Override
-	public Throwable getFailureCause() {
-		return null;
-	}
-
-	@Override
-	public boolean isAvailable(int numCreditsAvailable) {
-		return false;
-	}
-
-	@Override
-	public int unsynchronizedGetNumberOfQueuedBuffers() {
-		return 0;
+	public void recycle(MemorySegment memorySegment) {
 	}
 }

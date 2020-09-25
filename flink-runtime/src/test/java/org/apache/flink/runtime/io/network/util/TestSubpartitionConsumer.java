@@ -22,7 +22,8 @@ import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.partition.BufferAvailabilityListener;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
+import org.apache.flink.runtime.io.network.partition.PipelinedSubpartitionView;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView.PartitionBuffer;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 
 import java.util.Random;
@@ -46,7 +47,7 @@ public class TestSubpartitionConsumer implements Callable<Boolean>, BufferAvaila
 	private static final int MAX_SLEEP_TIME_MS = 20;
 
 	/** The subpartition viewQueue to consume. */
-	private volatile ResultSubpartitionView subpartitionView;
+	private volatile PipelinedSubpartitionView subpartitionView;
 
 	private BlockingQueue<ResultSubpartitionView> viewQueue = new ArrayBlockingQueue<>(1);
 
@@ -73,7 +74,7 @@ public class TestSubpartitionConsumer implements Callable<Boolean>, BufferAvaila
 		this.callback = checkNotNull(callback);
 	}
 
-	public void setSubpartitionView(ResultSubpartitionView subpartitionView) {
+	public void setSubpartitionView(PipelinedSubpartitionView subpartitionView) {
 		this.subpartitionView = checkNotNull(subpartitionView);
 	}
 
@@ -91,7 +92,7 @@ public class TestSubpartitionConsumer implements Callable<Boolean>, BufferAvaila
 					}
 				}
 
-				final BufferAndBacklog bufferAndBacklog = subpartitionView.getNextBuffer();
+				final PartitionBuffer bufferAndBacklog = subpartitionView.getNextData();
 
 				if (isSlowConsumer) {
 					Thread.sleep(random.nextInt(MAX_SLEEP_TIME_MS + 1));
@@ -101,7 +102,7 @@ public class TestSubpartitionConsumer implements Callable<Boolean>, BufferAvaila
 					if (bufferAndBacklog.isDataAvailable()) {
 						dataAvailableNotification.set(true);
 					}
-					if (bufferAndBacklog.buffer().isBuffer()) {
+					if (bufferAndBacklog.isBuffer()) {
 						callback.onBuffer(bufferAndBacklog.buffer());
 					} else {
 						final AbstractEvent event = EventSerializer.fromBuffer(bufferAndBacklog.buffer(),
