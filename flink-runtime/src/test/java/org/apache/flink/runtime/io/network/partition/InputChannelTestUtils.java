@@ -174,6 +174,11 @@ public class InputChannelTestUtils {
 		}
 
 		@Override
+		public MemorySegment requestMemorySegment() {
+			return null;
+		}
+
+		@Override
 		public Collection<MemorySegment> requestMemorySegments(int numberOfSegmentsToRequest) {
 			return Collections.emptyList();
 		}
@@ -191,6 +196,11 @@ public class InputChannelTestUtils {
 
 		public UnpooledMemorySegmentProvider(int pageSize) {
 			this.pageSize = pageSize;
+		}
+
+		@Override
+		public MemorySegment requestMemorySegment() {
+			return MemorySegmentFactory.allocateUnpooledSegment(pageSize);
 		}
 
 		@Override
