@@ -53,8 +53,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
@@ -139,13 +137,6 @@ public class ChannelPersistenceITCase {
 		return result.array();
 	}
 
-	private byte[] collectBytes(Buffer buffer) {
-		ByteBuffer nioBufferReadable = buffer.getNioBufferReadable();
-		byte[] buf = new byte[nioBufferReadable.capacity()];
-		nioBufferReadable.get(buf);
-		return buf;
-	}
-
 	private byte[] randomBytes(int size) {
 		byte[] bytes = new byte[size];
 		RANDOM.nextBytes(bytes);
@@ -202,11 +193,6 @@ public class ChannelPersistenceITCase {
 				new StateObjectCollection<>(t.getResultSubpartitionStateHandles().get())
 			)
 		));
-	}
-
-	@SuppressWarnings("unchecked")
-	private <C> List<C> collectBytes(Collection<StateObject> handles, Class<C> clazz) {
-		return handles.stream().filter(clazz::isInstance).map(h -> (C) h).collect(Collectors.toList());
 	}
 
 	private static int sizeOfBytes(Map<?, byte[]> map) {

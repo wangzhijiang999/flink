@@ -32,14 +32,10 @@ import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGateBuilder;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-
 import java.util.Collection;
 import java.util.Collections;
 
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -47,30 +43,6 @@ import static org.mockito.Mockito.when;
  * Some utility methods used for testing InputChannels and InputGates.
  */
 public class InputChannelTestUtils {
-	/**
-	 * Creates a result partition manager that ignores all IDs, and simply returns the given
-	 * subpartitions in sequence.
-	 */
-	public static ResultPartitionManager createResultPartitionManager(final ResultSubpartition[] sources) throws Exception {
-
-		final Answer<ResultSubpartitionView> viewCreator = new Answer<ResultSubpartitionView>() {
-
-			private int num = 0;
-
-			@Override
-			public ResultSubpartitionView answer(InvocationOnMock invocation) throws Throwable {
-				BufferAvailabilityListener channel = (BufferAvailabilityListener) invocation.getArguments()[2];
-				return sources[num++].createReadView(channel);
-			}
-		};
-
-		ResultPartitionManager manager = mock(ResultPartitionManager.class);
-		when(manager.createSubpartitionView(
-				any(ResultPartitionID.class), anyInt(), any(BufferAvailabilityListener.class)))
-				.thenAnswer(viewCreator);
-
-		return manager;
-	}
 
 	public static SingleInputGate createSingleInputGate(int numberOfChannels) {
 		return new SingleInputGateBuilder().setNumberOfChannels(numberOfChannels).build();
