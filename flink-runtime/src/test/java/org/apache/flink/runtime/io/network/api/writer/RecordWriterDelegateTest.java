@@ -19,10 +19,10 @@
 package org.apache.flink.runtime.io.network.api.writer;
 
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
-import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.partition.NoOpBufferAvailablityListener;
+import org.apache.flink.runtime.io.network.partition.PartitionData;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionBuilder;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
@@ -42,6 +42,8 @@ import java.util.concurrent.CompletableFuture;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import static org.apache.flink.runtime.io.network.api.writer.RecordWriterTest.getBuffer;
 
 /**
  * Tests for the {@link SingleRecordWriter} and {@link MultipleRecordWriters}.
@@ -152,9 +154,9 @@ public class RecordWriterDelegateTest extends TestLogger {
 
 		// recycle the buffer to make the local pool available again
 		ResultSubpartitionView readView = recordWriter.getTargetPartition().createSubpartitionView(0, new NoOpBufferAvailablityListener());
-		Buffer buffer = readView.getNextBuffer().buffer();
+		PartitionData buffer = readView.getNextData();
 
-		buffer.recycleBuffer();
+		buffer.recycle();
 		assertTrue(future.isDone());
 		assertTrue(writerDelegate.isAvailable());
 		assertTrue(writerDelegate.getAvailableFuture().isDone());
@@ -173,7 +175,7 @@ public class RecordWriterDelegateTest extends TestLogger {
 				assertEquals(1, partition.getNumberOfQueuedBuffers(i));
 
 				ResultSubpartitionView view = partition.createSubpartitionView(i, new NoOpBufferAvailablityListener());
-				BufferOrEvent boe = RecordWriterTest.parseBuffer(view.getNextBuffer().buffer(), i);
+				BufferOrEvent boe = RecordWriterTest.parseBuffer(getBuffer(view), i);
 				assertTrue(boe.isEvent());
 				assertEquals(message, boe.getEvent());
 			}

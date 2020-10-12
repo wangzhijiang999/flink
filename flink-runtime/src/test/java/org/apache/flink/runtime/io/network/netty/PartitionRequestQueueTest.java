@@ -28,6 +28,7 @@ import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.partition.BufferAvailabilityListener;
 import org.apache.flink.runtime.io.network.partition.NoOpBufferAvailablityListener;
 import org.apache.flink.runtime.io.network.partition.NoOpResultSubpartitionView;
+import org.apache.flink.runtime.io.network.partition.PartitionData;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartitionTest;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartitionView;
@@ -36,7 +37,6 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.io.network.util.TestBufferFactory;
@@ -57,6 +57,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.apache.flink.runtime.io.network.api.writer.RecordWriterTest.getBuffer;
 import static org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils.createEventBufferConsumer;
 import static org.apache.flink.runtime.io.network.partition.PartitionTestUtils.createPartition;
 import static org.hamcrest.Matchers.contains;
@@ -203,7 +204,7 @@ public class PartitionRequestQueueTest {
 	}
 
 	private static class DefaultBufferResultSubpartitionView extends NoOpResultSubpartitionView {
-		/** Number of buffer in the backlog to report with every {@link #getNextBuffer()} call. */
+		/** Number of buffer in the backlog to report with every {@link #getNextData()} call. */
 		private final AtomicInteger buffersInBacklog;
 
 		private DefaultBufferResultSubpartitionView(int buffersInBacklog) {
@@ -212,9 +213,9 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public BufferAndBacklog getNextBuffer() {
+		public PartitionData getNextData() throws IOException {
 			int buffers = buffersInBacklog.decrementAndGet();
-			return new BufferAndBacklog(
+			return new PartitionData.PartitionBuffer(
 				TestBufferFactory.createBuffer(10),
 				buffers,
 				buffers > 0 ? Buffer.DataType.DATA_BUFFER : Buffer.DataType.NONE,
@@ -238,12 +239,12 @@ public class PartitionRequestQueueTest {
 
 		@Nullable
 		@Override
-		public BufferAndBacklog getNextBuffer() {
-			BufferAndBacklog nextBuffer = super.getNextBuffer();
-			return new BufferAndBacklog(
-				nextBuffer.buffer().readOnlySlice(),
-				nextBuffer.buffersInBacklog(),
-				nextBuffer.getNextDataType(),
+		public PartitionData getNextData() throws IOException {
+			PartitionData nextData = super.getNextData();
+			return new PartitionData.PartitionBuffer(
+				getBuffer(nextData).readOnlySlice(),
+				nextData.buffersInBacklog(),
+				nextData.getNextDataType(),
 				0);
 		}
 	}

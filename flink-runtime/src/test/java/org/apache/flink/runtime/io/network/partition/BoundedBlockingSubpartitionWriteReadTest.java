@@ -26,7 +26,6 @@ import org.apache.flink.runtime.io.disk.FileChannelManagerImpl;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferDecompressor;
-import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 
 import org.junit.AfterClass;
@@ -169,25 +168,26 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 			int numBuffers,
 			boolean compressionEnabled,
 			BufferDecompressor decompressor) throws Exception {
-		BufferAndBacklog next;
+		PartitionData next;
 		long expectedNextLong = 0L;
 		int nextExpectedBacklog = numBuffers - 1;
 
-		while ((next = reader.getNextBuffer()) != null && next.buffer().isBuffer()) {
+		while ((next = reader.getNextData()) != null && next.isBuffer()) {
 			assertTrue(next.isDataAvailable());
 			assertEquals(nextExpectedBacklog, next.buffersInBacklog());
 
-			ByteBuffer buffer = next.buffer().getNioBufferReadable();
-			if (compressionEnabled && next.buffer().isCompressed()) {
-				Buffer uncompressedBuffer = decompressor.decompressToIntermediateBuffer(next.buffer());
-				buffer = uncompressedBuffer.getNioBufferReadable();
+			Buffer buffer = next.getBuffer(MemorySegmentFactory.allocateUnpooledSegment(BUFFER_SIZE));
+			ByteBuffer byteBuffer = buffer.getNioBufferReadable();
+			if (compressionEnabled && buffer.isCompressed()) {
+				Buffer uncompressedBuffer = decompressor.decompressToIntermediateBuffer(buffer);
+				byteBuffer = uncompressedBuffer.getNioBufferReadable();
 				uncompressedBuffer.recycleBuffer();
 			}
-			while (buffer.hasRemaining()) {
-				assertEquals(expectedNextLong++, buffer.getLong());
+			while (byteBuffer.hasRemaining()) {
+				assertEquals(expectedNextLong++, byteBuffer.getLong());
 			}
 
-			next.buffer().recycleBuffer();
+			next.recycle();
 			nextExpectedBacklog--;
 		}
 

@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.Buffer.DataType;
@@ -73,6 +74,25 @@ public abstract class PartitionData {
 		return sequenceNumber;
 	}
 
+	@VisibleForTesting
+	public Buffer buffer() throws IOException {
+		return getBuffer(null);
+	}
+
+	@VisibleForTesting
+	public int buffersInBacklog() {
+		return backlog;
+	}
+
+	@VisibleForTesting
+	public boolean isDataAvailable() {
+		return nextDataType != DataType.NONE;
+	}
+
+	@VisibleForTesting
+	public void recycle() {
+	}
+
 	/**
 	 * The pipelined partition or mmap-based bounded blocking partition provide the
 	 * buffer-format data to be consumed.
@@ -107,6 +127,16 @@ public abstract class PartitionData {
 		@Override
 		public Buffer getBuffer(MemorySegment segment) {
 			return buffer;
+		}
+
+		@VisibleForTesting
+		public Buffer buffer() {
+			return buffer;
+		}
+
+		@Override
+		public void recycle() {
+			buffer.recycleBuffer();
 		}
 	}
 
