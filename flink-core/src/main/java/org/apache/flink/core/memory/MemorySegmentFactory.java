@@ -91,6 +91,7 @@ public final class MemorySegmentFactory {
 	 * @return A new memory segment, backed by unpooled heap memory.
 	 */
 	public static MemorySegment allocateUnpooledSegment(int size) {
+		System.out.println(1);
 		return allocateUnpooledSegment(size, null);
 	}
 

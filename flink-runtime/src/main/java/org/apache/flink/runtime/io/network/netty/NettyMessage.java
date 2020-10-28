@@ -337,7 +337,7 @@ public abstract class NettyMessage {
 			try {
 				headerBuf = fillHeader(allocator);
 
-				out.write(headerBuf, promise);
+				out.write(headerBuf);
 				out.write(buffer, promise);
 			}
 			catch (Throwable t) {

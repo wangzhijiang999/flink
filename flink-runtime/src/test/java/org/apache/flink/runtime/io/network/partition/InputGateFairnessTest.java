@@ -351,7 +351,8 @@ public class InputGateFairnessTest {
 				SingleInputGateBuilder.NO_OP_PRODUCER_CHECKER,
 				STUB_BUFFER_POOL_FACTORY,
 				null,
-				new UnpooledMemorySegmentProvider(32 * 1024));
+				new UnpooledMemorySegmentProvider(32 * 1024),
+				32 * 1024);
 
 			channelsWithData = getInputChannelsWithData();
 

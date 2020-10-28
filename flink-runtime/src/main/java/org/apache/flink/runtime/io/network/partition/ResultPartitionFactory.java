@@ -63,6 +63,8 @@ public class ResultPartitionFactory {
 
 	private final int maxBuffersPerChannel;
 
+	private final boolean sslEnabled;
+
 	public ResultPartitionFactory(
 		ResultPartitionManager partitionManager,
 		FileChannelManager channelManager,
@@ -73,7 +75,8 @@ public class ResultPartitionFactory {
 		int networkBufferSize,
 		boolean blockingShuffleCompressionEnabled,
 		String compressionCodec,
-		int maxBuffersPerChannel) {
+		int maxBuffersPerChannel,
+		boolean sslEnabled) {
 
 		this.partitionManager = partitionManager;
 		this.channelManager = channelManager;
@@ -85,6 +88,7 @@ public class ResultPartitionFactory {
 		this.blockingShuffleCompressionEnabled = blockingShuffleCompressionEnabled;
 		this.compressionCodec = compressionCodec;
 		this.maxBuffersPerChannel = maxBuffersPerChannel;
+		this.sslEnabled = sslEnabled;
 	}
 
 	public ResultPartition create(
@@ -153,7 +157,8 @@ public class ResultPartitionFactory {
 				blockingPartition,
 				blockingSubpartitionType,
 				networkBufferSize,
-				channelManager);
+				channelManager,
+				sslEnabled);
 
 			partition = blockingPartition;
 		}
@@ -171,12 +176,13 @@ public class ResultPartitionFactory {
 			BoundedBlockingResultPartition parent,
 			BoundedBlockingSubpartitionType blockingSubpartitionType,
 			int networkBufferSize,
-			FileChannelManager channelManager) {
+			FileChannelManager channelManager,
+			boolean sslEnabled) {
 		int i = 0;
 		try {
 			for (i = 0; i < subpartitions.length; i++) {
 				final File spillFile = channelManager.createChannel().getPathFile();
-				subpartitions[i] = blockingSubpartitionType.create(i, parent, spillFile, networkBufferSize);
+				subpartitions[i] = blockingSubpartitionType.create(i, parent, spillFile, networkBufferSize, sslEnabled);
 			}
 		}
 		catch (IOException e) {

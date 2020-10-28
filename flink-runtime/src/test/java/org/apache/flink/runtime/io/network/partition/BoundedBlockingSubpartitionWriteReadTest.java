@@ -235,7 +235,8 @@ public class BoundedBlockingSubpartitionWriteReadTest {
 					compressionEnabled,
 					BUFFER_SIZE),
 				new File(TMP_FOLDER.newFolder(), "partitiondata"),
-				BUFFER_SIZE);
+				BUFFER_SIZE,
+				false);
 	}
 
 	private static LongReader[] createSubpartitionLongReaders(

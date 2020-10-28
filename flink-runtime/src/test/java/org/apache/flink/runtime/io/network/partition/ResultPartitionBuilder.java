@@ -161,7 +161,8 @@ public class ResultPartitionBuilder {
 			networkBufferSize,
 			blockingShuffleCompressionEnabled,
 			compressionCodec,
-			maxBuffersPerChannel);
+			maxBuffersPerChannel,
+			false);
 
 		SupplierWithException<BufferPool, IOException> factory = bufferPoolFactory.orElseGet(() ->
 			resultPartitionFactory.createBufferPoolFactory(numberOfSubpartitions, partitionType));

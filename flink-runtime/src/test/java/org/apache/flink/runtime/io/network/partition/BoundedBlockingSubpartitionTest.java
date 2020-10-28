@@ -33,6 +33,7 @@ import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 import static org.apache.flink.runtime.io.network.partition.PartitionTestUtils.createPartition;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -136,6 +137,11 @@ public class BoundedBlockingSubpartitionTest extends SubpartitionTestBase {
 		}
 
 		@Override
+		public Path getFilePath() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
 		public void close() {}
 	}
 
@@ -162,6 +168,11 @@ public class BoundedBlockingSubpartitionTest extends SubpartitionTestBase {
 
 		@Override
 		public long getSize() {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public Path getFilePath() {
 			throw new UnsupportedOperationException();
 		}
 
