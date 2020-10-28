@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.netty;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
@@ -26,6 +27,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.shaded.netty4.io.netty.buffer.CompositeByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelOutboundInvoker;
 import org.apache.flink.util.ExceptionUtils;
 
@@ -333,18 +335,7 @@ public abstract class NettyMessage {
 		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws IOException {
 			ByteBuf headerBuf = null;
 			try {
-				// in order to forward the buffer to netty, it needs an allocator set
-				buffer.setAllocator(allocator);
-
-				// only allocate header buffer - we will combine it with the data buffer below
-				headerBuf = allocateBuffer(allocator, ID, MESSAGE_HEADER_LENGTH, bufferSize, false);
-
-				receiverId.writeTo(headerBuf);
-				headerBuf.writeInt(sequenceNumber);
-				headerBuf.writeInt(backlog);
-				headerBuf.writeByte(dataType.ordinal());
-				headerBuf.writeBoolean(isCompressed);
-				headerBuf.writeInt(buffer.readableBytes());
+				headerBuf = fillHeader(allocator);
 
 				out.write(headerBuf, promise);
 				out.write(buffer, promise);
@@ -359,24 +350,18 @@ public abstract class NettyMessage {
 			}
 		}
 
+		@VisibleForTesting
 		ByteBuf write(ByteBufAllocator allocator) throws IOException {
 			ByteBuf headerBuf = null;
 			try {
-				// in order to forward the buffer to netty, it needs an allocator set
-				buffer.setAllocator(allocator);
+				headerBuf = fillHeader(allocator);
 
-				// only allocate header buffer - we will combine it with the data buffer below
-				headerBuf = allocateBuffer(allocator, ID, MESSAGE_HEADER_LENGTH, bufferSize, false);
-
-				receiverId.writeTo(headerBuf);
-				headerBuf.writeInt(sequenceNumber);
-				headerBuf.writeInt(backlog);
-				headerBuf.writeByte(dataType.ordinal());
-				headerBuf.writeBoolean(isCompressed);
-				headerBuf.writeInt(buffer.readableBytes());
-
-				out.write(headerBuf, promise);
-				out.write(buffer, promise);
+				CompositeByteBuf composityBuf = allocator.compositeDirectBuffer();
+				composityBuf.addComponent(headerBuf);
+				composityBuf.addComponent(buffer.asByteBuf());
+				// update writer index since we have data written to the components:
+				composityBuf.writerIndex(headerBuf.writerIndex() + buffer.asByteBuf().writerIndex());
+				return composityBuf;
 			}
 			catch (Throwable t) {
 				if (headerBuf != null) {
@@ -385,7 +370,24 @@ public abstract class NettyMessage {
 				buffer.recycleBuffer();
 
 				ExceptionUtils.rethrowIOException(t);
+				return null; // silence the compiler
 			}
+		}
+
+		private ByteBuf fillHeader(ByteBufAllocator allocator) {
+			// in order to forward the buffer to netty, it needs an allocator set
+			buffer.setAllocator(allocator);
+
+			// only allocate header buffer - we will combine it with the data buffer below
+			ByteBuf headerBuf = allocateBuffer(allocator, ID, MESSAGE_HEADER_LENGTH, bufferSize, false);
+
+			receiverId.writeTo(headerBuf);
+			headerBuf.writeInt(sequenceNumber);
+			headerBuf.writeInt(backlog);
+			headerBuf.writeByte(dataType.ordinal());
+			headerBuf.writeBoolean(isCompressed);
+			headerBuf.writeInt(buffer.readableBytes());
+			return headerBuf;
 		}
 
 		/**
