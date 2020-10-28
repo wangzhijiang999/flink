@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
@@ -74,7 +75,9 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 
 	/** All created and not yet released readers. */
 	@GuardedBy("lock")
-	private final Set<BoundedBlockingSubpartitionReader> readers;
+	private final Set<ResultSubpartitionView> readers;
+
+	private final boolean fileSSLEnabled;
 
 	/** Counter for the number of data buffers (not events!) written. */
 	private int numDataBuffersWritten;
@@ -88,14 +91,21 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 	/** Flag indicating whether the subpartition has been released. */
 	private boolean isReleased;
 
+	@VisibleForTesting
+	public BoundedBlockingSubpartition(int index, ResultPartition parent, BoundedData data) {
+		this(index, parent, data, false);
+	}
+
 	public BoundedBlockingSubpartition(
 			int index,
 			ResultPartition parent,
-			BoundedData data) {
+			BoundedData data,
+			boolean fileSSLEnabled) {
 
 		super(index, parent);
 
 		this.data = checkNotNull(data);
+		this.fileSSLEnabled = fileSSLEnabled;
 		this.readers = new HashSet<>();
 	}
 
@@ -204,14 +214,20 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 			checkState(!isReleased, "data partition already released");
 			checkState(isFinished, "writing of blocking partition not yet finished");
 
-			final BoundedBlockingSubpartitionReader reader = new BoundedBlockingSubpartitionReader(
+			final ResultSubpartitionView reader;
+			if (!fileSSLEnabled) {
+				reader = new BoundedBlockingSubpartitionView(
+					this, data.getFilePath(), numDataBuffersWritten, numBuffersAndEventsWritten);
+			} else {
+				reader = new BoundedBlockingSubpartitionReader(
 					this, data, numDataBuffersWritten, availability);
+			}
 			readers.add(reader);
 			return reader;
 		}
 	}
 
-	void releaseReaderReference(BoundedBlockingSubpartitionReader reader) throws IOException {
+	void releaseReaderReference(ResultSubpartitionView reader) throws IOException {
 		onConsumedSubpartition();
 
 		synchronized (lock) {
@@ -262,10 +278,10 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 	 * Data is eagerly spilled (written to disk) and readers directly read from the file.
 	 */
 	public static BoundedBlockingSubpartition createWithFileChannel(
-			int index, ResultPartition parent, File tempFile, int readBufferSize) throws IOException {
+			int index, ResultPartition parent, File tempFile, int readBufferSize, boolean fileSSLEnabled) throws IOException {
 
 		final FileChannelBoundedData bd = FileChannelBoundedData.create(tempFile.toPath(), readBufferSize);
-		return new BoundedBlockingSubpartition(index, parent, bd);
+		return new BoundedBlockingSubpartition(index, parent, bd, fileSSLEnabled);
 	}
 
 	/**
@@ -277,7 +293,7 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 			int index, ResultPartition parent, File tempFile) throws IOException {
 
 		final MemoryMappedBoundedData bd = MemoryMappedBoundedData.create(tempFile.toPath());
-		return new BoundedBlockingSubpartition(index, parent, bd);
+		return new BoundedBlockingSubpartition(index, parent, bd, false);
 
 	}
 
@@ -292,6 +308,6 @@ final class BoundedBlockingSubpartition extends ResultSubpartition {
 			int index, ResultPartition parent, File tempFile) throws IOException {
 
 		final FileChannelMemoryMappedBoundedData bd = FileChannelMemoryMappedBoundedData.create(tempFile.toPath());
-		return new BoundedBlockingSubpartition(index, parent, bd);
+		return new BoundedBlockingSubpartition(index, parent, bd, false);
 	}
 }

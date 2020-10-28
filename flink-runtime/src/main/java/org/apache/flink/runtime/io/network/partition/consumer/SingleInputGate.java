@@ -19,6 +19,8 @@
 package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.core.memory.MemorySegment;
+import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.core.memory.MemorySegmentProvider;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.event.AbstractEvent;
@@ -188,6 +190,8 @@ public class SingleInputGate extends IndexedInputGate {
 
 	private final MemorySegmentProvider memorySegmentProvider;
 
+	private final MemorySegment segmentForLocalChannel;
+
 	public SingleInputGate(
 		String owningTaskName,
 		int gateIndex,
@@ -198,7 +202,8 @@ public class SingleInputGate extends IndexedInputGate {
 		PartitionProducerStateProvider partitionProducerStateProvider,
 		SupplierWithException<BufferPool, IOException> bufferPoolFactory,
 		@Nullable BufferDecompressor bufferDecompressor,
-		MemorySegmentProvider memorySegmentProvider) {
+		MemorySegmentProvider memorySegmentProvider,
+		int segmentSize) {
 
 		this.owningTaskName = checkNotNull(owningTaskName);
 		Preconditions.checkArgument(0 <= gateIndex, "The gate index must be positive.");
@@ -227,6 +232,8 @@ public class SingleInputGate extends IndexedInputGate {
 		this.memorySegmentProvider = checkNotNull(memorySegmentProvider);
 
 		this.closeFuture = new CompletableFuture<>();
+
+		this.segmentForLocalChannel = MemorySegmentFactory.allocateUnpooledSegment(segmentSize);
 	}
 
 	protected PrioritizedDeque<InputChannel> getInputChannelsWithData() {
@@ -753,6 +760,10 @@ public class SingleInputGate extends IndexedInputGate {
 		// is safe to not synchronize the requestLock here. We will refactor the code to not
 		// rely on this assumption in the future.
 		channels[channelIndex].resumeConsumption();
+	}
+
+	MemorySegment getMemorySegment() {
+		return segmentForLocalChannel;
 	}
 
 	// ------------------------------------------------------------------------

@@ -147,7 +147,8 @@ public class SingleInputGateBuilder {
 			partitionProducerStateProvider,
 			bufferPoolFactory,
 			bufferDecompressor,
-			segmentProvider);
+			segmentProvider,
+			4096);
 		if (channelFactory != null) {
 			gate.setInputChannels(IntStream.range(0, numberOfChannels)
 				.mapToObj(index -> channelFactory.apply(InputChannelBuilder.newBuilder().setChannelIndex(index), gate))
