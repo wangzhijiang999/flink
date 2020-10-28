@@ -26,13 +26,13 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelOutboundInvoker;
 import org.apache.flink.util.ExceptionUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufInputStream;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufOutputStream;
-import org.apache.flink.shaded.netty4.io.netty.buffer.CompositeByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandler;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandlerContext;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -46,6 +46,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
+import java.util.function.Consumer;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -67,7 +68,7 @@ public abstract class NettyMessage {
 
 	static final int MAGIC_NUMBER = 0xBADC0FFE;
 
-	abstract ByteBuf write(ByteBufAllocator allocator) throws Exception;
+	abstract void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws Exception;
 
 	// ------------------------------------------------------------------------
 
@@ -167,19 +168,11 @@ public abstract class NettyMessage {
 		@Override
 		public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
 			if (msg instanceof NettyMessage) {
-
-				ByteBuf serialized = null;
-
 				try {
-					serialized = ((NettyMessage) msg).write(ctx.alloc());
+					((NettyMessage) msg).write(ctx, promise, ctx.alloc());
 				}
 				catch (Throwable t) {
 					throw new IOException("Error while serializing message: " + msg, t);
-				}
-				finally {
-					if (serialized != null) {
-						ctx.write(serialized, promise);
-					}
 				}
 			}
 			else {
@@ -337,6 +330,35 @@ public abstract class NettyMessage {
 		// --------------------------------------------------------------------
 
 		@Override
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws IOException {
+			ByteBuf headerBuf = null;
+			try {
+				// in order to forward the buffer to netty, it needs an allocator set
+				buffer.setAllocator(allocator);
+
+				// only allocate header buffer - we will combine it with the data buffer below
+				headerBuf = allocateBuffer(allocator, ID, MESSAGE_HEADER_LENGTH, bufferSize, false);
+
+				receiverId.writeTo(headerBuf);
+				headerBuf.writeInt(sequenceNumber);
+				headerBuf.writeInt(backlog);
+				headerBuf.writeByte(dataType.ordinal());
+				headerBuf.writeBoolean(isCompressed);
+				headerBuf.writeInt(buffer.readableBytes());
+
+				out.write(headerBuf, promise);
+				out.write(buffer, promise);
+			}
+			catch (Throwable t) {
+				if (headerBuf != null) {
+					headerBuf.release();
+				}
+				buffer.recycleBuffer();
+
+				ExceptionUtils.rethrowIOException(t);
+			}
+		}
+
 		ByteBuf write(ByteBufAllocator allocator) throws IOException {
 			ByteBuf headerBuf = null;
 			try {
@@ -353,12 +375,8 @@ public abstract class NettyMessage {
 				headerBuf.writeBoolean(isCompressed);
 				headerBuf.writeInt(buffer.readableBytes());
 
-				CompositeByteBuf composityBuf = allocator.compositeDirectBuffer();
-				composityBuf.addComponent(headerBuf);
-				composityBuf.addComponent(buffer.asByteBuf());
-				// update writer index since we have data written to the components:
-				composityBuf.writerIndex(headerBuf.writerIndex() + buffer.asByteBuf().writerIndex());
-				return composityBuf;
+				out.write(headerBuf, promise);
+				out.write(buffer, promise);
 			}
 			catch (Throwable t) {
 				if (headerBuf != null) {
@@ -367,7 +385,6 @@ public abstract class NettyMessage {
 				buffer.recycleBuffer();
 
 				ExceptionUtils.rethrowIOException(t);
-				return null; // silence the compiler
 			}
 		}
 
@@ -437,7 +454,7 @@ public abstract class NettyMessage {
 		}
 
 		@Override
-		ByteBuf write(ByteBufAllocator allocator) throws IOException {
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws IOException {
 			final ByteBuf result = allocateBuffer(allocator, ID);
 
 			try (ObjectOutputStream oos = new ObjectOutputStream(new ByteBufOutputStream(result))) {
@@ -452,7 +469,7 @@ public abstract class NettyMessage {
 
 				// Update frame length...
 				result.setInt(0, result.readableBytes());
-				return result;
+				out.write(result, promise);
 			}
 			catch (Throwable t) {
 				result.release();
@@ -508,27 +525,16 @@ public abstract class NettyMessage {
 		}
 
 		@Override
-		ByteBuf write(ByteBufAllocator allocator) throws IOException {
-			ByteBuf result = null;
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws IOException {
+			Consumer<ByteBuf> consumer = (bb) -> {
+				partitionId.getPartitionId().writeTo(bb);
+				partitionId.getProducerId().writeTo(bb);
+				bb.writeInt(queueIndex);
+				receiverId.writeTo(bb);
+				bb.writeInt(credit);
+			};
 
-			try {
-				result = allocateBuffer(allocator, ID, 20 + 40 + 4 + 16 + 4);
-
-				partitionId.getPartitionId().writeTo(result);
-				partitionId.getProducerId().writeTo(result);
-				result.writeInt(queueIndex);
-				receiverId.writeTo(result);
-				result.writeInt(credit);
-
-				return result;
-			}
-			catch (Throwable t) {
-				if (result != null) {
-					result.release();
-				}
-
-				throw new IOException(t);
-			}
+			writeTo(out, promise, allocator, consumer, ID, 20 + 40 + 4 + 16 + 4);
 		}
 
 		static PartitionRequest readFrom(ByteBuf buffer) {
@@ -566,32 +572,19 @@ public abstract class NettyMessage {
 		}
 
 		@Override
-		ByteBuf write(ByteBufAllocator allocator) throws IOException {
-			ByteBuf result = null;
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws IOException {
+			// TODO Directly serialize to Netty's buffer
+			ByteBuffer serializedEvent = EventSerializer.toSerializedEvent(event);
 
-			try {
-				// TODO Directly serialize to Netty's buffer
-				ByteBuffer serializedEvent = EventSerializer.toSerializedEvent(event);
+			Consumer<ByteBuf> consumer = (bb) -> {
+				bb.writeInt(serializedEvent.remaining());
+				bb.writeBytes(serializedEvent);
 
-				result = allocateBuffer(allocator, ID, 4 + serializedEvent.remaining() + 20 + 40 + 16);
+				partitionId.getPartitionId().writeTo(bb);
+				partitionId.getProducerId().writeTo(bb);
+			};
 
-				result.writeInt(serializedEvent.remaining());
-				result.writeBytes(serializedEvent);
-
-				partitionId.getPartitionId().writeTo(result);
-				partitionId.getProducerId().writeTo(result);
-
-				receiverId.writeTo(result);
-
-				return result;
-			}
-			catch (Throwable t) {
-				if (result != null) {
-					result.release();
-				}
-
-				throw new IOException(t);
-			}
+			writeTo(out, promise, allocator, consumer, ID, 4 + serializedEvent.remaining() + 20 + 40 + 16);
 		}
 
 		static TaskEventRequest readFrom(ByteBuf buffer, ClassLoader classLoader) throws IOException {
@@ -633,22 +626,8 @@ public abstract class NettyMessage {
 		}
 
 		@Override
-		ByteBuf write(ByteBufAllocator allocator) throws Exception {
-			ByteBuf result = null;
-
-			try {
-				result = allocateBuffer(allocator, ID, 16);
-				receiverId.writeTo(result);
-			}
-			catch (Throwable t) {
-				if (result != null) {
-					result.release();
-				}
-
-				throw new IOException(t);
-			}
-
-			return result;
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws Exception {
+			writeTo(out, promise, allocator, receiverId :: writeTo, ID, 16);
 		}
 
 		static CancelPartitionRequest readFrom(ByteBuf buffer) throws Exception {
@@ -664,8 +643,8 @@ public abstract class NettyMessage {
 		}
 
 		@Override
-		ByteBuf write(ByteBufAllocator allocator) throws Exception {
-			return allocateBuffer(allocator, ID, 0);
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws Exception {
+			writeTo(out, promise, allocator, ignored -> {}, ID, 0);
 		}
 
 		static CloseRequest readFrom(@SuppressWarnings("unused") ByteBuf buffer) throws Exception {
@@ -691,23 +670,12 @@ public abstract class NettyMessage {
 		}
 
 		@Override
-		ByteBuf write(ByteBufAllocator allocator) throws IOException {
-			ByteBuf result = null;
-
-			try {
-				result = allocateBuffer(allocator, ID, 4 + 16);
-				result.writeInt(credit);
-				receiverId.writeTo(result);
-
-				return result;
-			}
-			catch (Throwable t) {
-				if (result != null) {
-					result.release();
-				}
-
-				throw new IOException(t);
-			}
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws IOException {
+			Consumer<ByteBuf> consumer = (bb) -> {
+				bb.writeInt(credit);
+				receiverId.writeTo(bb);
+			};
+			writeTo(out, promise, allocator, consumer, ID, 4 + 16);
 		}
 
 		static AddCredit readFrom(ByteBuf buffer) {
@@ -737,22 +705,8 @@ public abstract class NettyMessage {
 		}
 
 		@Override
-		ByteBuf write(ByteBufAllocator allocator) throws IOException {
-			ByteBuf result = null;
-
-			try {
-				result = allocateBuffer(allocator, ID, 16);
-				receiverId.writeTo(result);
-
-				return result;
-			}
-			catch (Throwable t) {
-				if (result != null) {
-					result.release();
-				}
-
-				throw new IOException(t);
-			}
+		void write(ChannelOutboundInvoker out, ChannelPromise promise, ByteBufAllocator allocator) throws IOException {
+			writeTo(out, promise, allocator, receiverId :: writeTo, ID, 16);
 		}
 
 		static ResumeConsumption readFrom(ByteBuf buffer) {
@@ -762,6 +716,29 @@ public abstract class NettyMessage {
 		@Override
 		public String toString() {
 			return String.format("ResumeConsumption(%s)", receiverId);
+		}
+	}
+
+	void writeTo(
+			ChannelOutboundInvoker out,
+			ChannelPromise promise,
+			ByteBufAllocator allocator,
+			Consumer<ByteBuf> consumer,
+			byte id,
+			int length) throws IOException {
+		ByteBuf result = null;
+
+		try {
+			result = allocateBuffer(allocator, id, length);
+			consumer.accept(result);
+			out.write(result, promise);
+		}
+		catch (Throwable t) {
+			if (result != null) {
+				result.release();
+			}
+
+			throw new IOException(t);
 		}
 	}
 }
